@@ -18,8 +18,9 @@ export async function downloadDemoExcelTemplate() {
 /**
  * 请求后端导出示例 Excel 文件，返回 Blob 及响应头用于浏览器下载。
  */
-export async function exportDemoExcel() {
+export async function exportDemoExcel(ids?: string[]) {
   return api.get<Blob>(buildApiUrl('/demo/excel/export'), {
+    params: ids?.length ? { ids: ids.join(',') } : undefined,
     responseType: 'blob',
   })
 }

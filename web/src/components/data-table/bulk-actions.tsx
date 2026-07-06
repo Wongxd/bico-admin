@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { type Table } from '@tanstack/react-table'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import {
@@ -12,7 +13,6 @@ import {
 
 type DataTableBulkActionsProps<TData> = {
   table: Table<TData>
-  entityName: string
   children: React.ReactNode
 }
 
@@ -22,7 +22,6 @@ type DataTableBulkActionsProps<TData> = {
  */
 export function DataTableBulkActions<TData>({
   table,
-  entityName,
   children,
 }: DataTableBulkActionsProps<TData>): React.ReactNode | null {
   const selectedRows = table.getFilteredSelectedRowModel().rows
@@ -33,7 +32,7 @@ export function DataTableBulkActions<TData>({
   // 选中数量变化时通知屏幕阅读器，避免视觉浮层出现但辅助技术无感知。
   useEffect(() => {
     if (selectedCount > 0) {
-      const message = `已选择 ${selectedCount} 个${entityName}，可执行批量操作。`
+      const message = `已选择 ${selectedCount} 项，可执行批量操作。`
 
       // 延后更新辅助文案，避免和表格选择状态更新形成级联渲染。
       queueMicrotask(() => {
@@ -44,7 +43,7 @@ export function DataTableBulkActions<TData>({
       const timer = setTimeout(() => setAnnouncement(''), 3000)
       return () => clearTimeout(timer)
     }
-  }, [selectedCount, entityName])
+  }, [selectedCount])
 
   const handleClearSelection = () => {
     table.resetRowSelection()
@@ -130,7 +129,7 @@ export function DataTableBulkActions<TData>({
       <div
         ref={toolbarRef}
         role='toolbar'
-        aria-label={`对已选择的 ${selectedCount} 个${entityName}执行批量操作`}
+        aria-label={`对已选择的 ${selectedCount} 项执行批量操作`}
         aria-describedby='bulk-actions-description'
         tabIndex={-1}
         onKeyDown={handleKeyDown}
@@ -177,7 +176,13 @@ export function DataTableBulkActions<TData>({
             className='flex items-center gap-x-1 text-sm'
             id='bulk-actions-description'
           >
-            <span>{`已选择 ${selectedCount} 个${entityName}`}</span>
+            <span>已选择</span>
+            <Badge
+              variant='secondary'
+              className='h-5 px-1.5 tabular-nums'
+            >
+              {selectedCount}
+            </Badge>
           </div>
 
           <Separator

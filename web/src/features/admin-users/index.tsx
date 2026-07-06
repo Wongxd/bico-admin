@@ -487,7 +487,7 @@ export function AdminUsers() {
             emptyMessage='暂无用户数据'
           />
           {canDelete && (
-            <DataTableBulkActions table={table} entityName='用户'>
+            <DataTableBulkActions table={table}>
               <Button
                 type='button'
                 variant='destructive'

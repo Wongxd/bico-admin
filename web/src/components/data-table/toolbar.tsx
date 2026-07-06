@@ -1,7 +1,8 @@
 import { Cross2Icon } from '@radix-ui/react-icons'
 import { type Table } from '@tanstack/react-table'
-import { RefreshCw } from 'lucide-react'
+import { Download, FileDown, Loader2, RefreshCw, Upload } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DataTableFacetedFilter } from './faceted-filter'
@@ -26,6 +27,24 @@ type DataTableToolbarProps<TData> = {
   }[]
   onRefresh?: () => void
   isRefreshing?: boolean
+  importAction?: {
+    onClick: () => void
+    isLoading?: boolean
+    disabled?: boolean
+    label?: string
+  }
+  exportAction?: {
+    onClick: (selectedIds: string[]) => void
+    isLoading?: boolean
+    disabled?: boolean
+    label?: string
+  }
+  templateAction?: {
+    onClick: () => void
+    isLoading?: boolean
+    disabled?: boolean
+    label?: string
+  }
 }
 
 /**
@@ -39,9 +58,16 @@ export function DataTableToolbar<TData>({
   filters = [],
   onRefresh,
   isRefreshing = false,
+  importAction,
+  exportAction,
+  templateAction,
 }: DataTableToolbarProps<TData>) {
   const isFiltered =
     table.getState().columnFilters.length > 0 || table.getState().globalFilter
+  const selectedIds = table
+    .getFilteredSelectedRowModel()
+    .rows.map((row) => row.id)
+  const selectedCount = selectedIds.length
 
   return (
     <div className='flex items-center justify-between'>
@@ -111,6 +137,70 @@ export function DataTableToolbar<TData>({
         )}
       </div>
       <div className='flex items-center gap-2'>
+        {importAction && (
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            className='h-8'
+            disabled={importAction.disabled || importAction.isLoading}
+            onClick={importAction.onClick}
+          >
+            {importAction.isLoading ? (
+              <Loader2 className='size-4 animate-spin' />
+            ) : (
+              <Upload className='size-4' />
+            )}
+            {importAction.label ?? '导入'}
+          </Button>
+        )}
+        {templateAction && (
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            className='h-8'
+            disabled={templateAction.disabled || templateAction.isLoading}
+            onClick={templateAction.onClick}
+          >
+            {templateAction.isLoading ? (
+              <Loader2 className='size-4 animate-spin' />
+            ) : (
+              <FileDown className='size-4' />
+            )}
+            {templateAction.label ?? '模板'}
+          </Button>
+        )}
+        {exportAction && (
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            className='h-8'
+            disabled={exportAction.disabled || exportAction.isLoading}
+            onClick={() => exportAction.onClick(selectedIds)}
+          >
+            {exportAction.isLoading ? (
+              <Loader2 className='size-4 animate-spin' />
+            ) : (
+              <Download className='size-4' />
+            )}
+            {exportAction.label ??
+              (selectedCount > 0 ? (
+                <>
+                  导出选中
+                  <Badge
+                    variant='secondary'
+                    className='ms-1 h-5 px-1.5 tabular-nums'
+                  >
+                    {selectedCount}
+                  </Badge>
+                </>
+              ) : (
+                '导出'
+              ))}
+          </Button>
+        )}
         {onRefresh && (
           <Button
             type='button'

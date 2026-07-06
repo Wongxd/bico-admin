@@ -5,6 +5,8 @@ import (
 	excelpkg "bico-admin/internal/pkg/excel"
 	"bico-admin/internal/pkg/response"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -27,6 +29,20 @@ func NewDemoExcelHandler() *DemoExcelHandler {
 
 // DemoExcelHeaders 示例表头定义。
 var DemoExcelHeaders = []string{"姓名", "手机号", "年龄", "城市"}
+
+type demoExcelRow struct {
+	ID    uint
+	Name  string
+	Phone string
+	Age   int
+	City  string
+}
+
+var demoExcelRows = []demoExcelRow{
+	{ID: 1, Name: "王五", Phone: "13600000000", Age: 32, City: "深圳"},
+	{ID: 2, Name: "赵六", Phone: "13700000000", Age: 25, City: "杭州"},
+	{ID: 3, Name: "钱七", Phone: "13500000000", Age: 41, City: "成都"},
+}
 
 // DownloadTemplate 下载导入模板（示例包含模拟数据）。
 // @Summary 下载 Excel 导入模板
@@ -97,7 +113,7 @@ func (h *DemoExcelHandler) Import(c *gin.Context) {
 
 // Export 导出 Excel（示例）。
 // @Summary 导出 Excel
-// @Description 导出示例 Excel 文件
+// @Description 导出示例 Excel 文件，传 ids 时只导出勾选行
 // @Tags 示例
 // @Produce application/octet-stream
 // @Security BearerAuth
@@ -110,15 +126,61 @@ func (h *DemoExcelHandler) Export(c *gin.Context) {
 		return
 	}
 
-	_ = excelpkg.AppendRows(f, [][]interface{}{
-		{"王五", "13600000000", 32, "深圳"},
-		{"赵六", "13700000000", 25, "杭州"},
-		{"钱七", "13500000000", 41, "成都"},
-	})
+	rows := filterDemoExcelRows(parseDemoExcelIDs(c.Query("ids")))
+	_ = excelpkg.AppendRows(f, buildDemoExcelExportRows(rows))
 
 	filename := "导出_示例_" + time.Now().Format("20060102_150405") + ".xlsx"
 	if err := excelpkg.WriteAsAttachment(c, f, filename); err != nil {
 		response.ErrorWithStatus(c, http.StatusInternalServerError, 500, err.Error())
 		return
 	}
+}
+
+// parseDemoExcelIDs 解析导出选中行 ID，非法片段直接忽略。
+func parseDemoExcelIDs(value string) []uint {
+	if value == "" {
+		return nil
+	}
+
+	parts := strings.Split(value, ",")
+	ids := make([]uint, 0, len(parts))
+	for _, part := range parts {
+		id, err := strconv.ParseUint(strings.TrimSpace(part), 10, 64)
+		// 导出勾选行只接受正整数 ID，非法值不参与筛选。
+		if err != nil || id == 0 {
+			continue
+		}
+		ids = append(ids, uint(id))
+	}
+	return crud.UniqueUints(ids)
+}
+
+// filterDemoExcelRows 按 ID 过滤示例数据；未传 ID 时导出全部示例数据。
+func filterDemoExcelRows(ids []uint) []demoExcelRow {
+	if len(ids) == 0 {
+		return demoExcelRows
+	}
+
+	idSet := make(map[uint]struct{}, len(ids))
+	for _, id := range ids {
+		idSet[id] = struct{}{}
+	}
+
+	rows := make([]demoExcelRow, 0, len(ids))
+	for _, row := range demoExcelRows {
+		// 只导出前端勾选的 ID，保持导出范围和列表选择一致。
+		if _, ok := idSet[row.ID]; ok {
+			rows = append(rows, row)
+		}
+	}
+	return rows
+}
+
+// buildDemoExcelExportRows 转换示例数据为 Excel 行数据。
+func buildDemoExcelExportRows(rows []demoExcelRow) [][]interface{} {
+	result := make([][]interface{}, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, []interface{}{row.Name, row.Phone, row.Age, row.City})
+	}
+	return result
 }

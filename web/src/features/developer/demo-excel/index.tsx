@@ -1,17 +1,25 @@
-import { useRef, useState, type ChangeEvent } from 'react'
-import { toast } from 'sonner'
-import { Download, FileDown, Loader2, Upload, X } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { Main } from '@/components/layout/main'
-import { Button } from '@/components/ui/button'
+import { useMemo, useRef, useState, type ChangeEvent } from 'react'
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+  type ColumnDef,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getPaginationRowModel,
+  type PaginationState,
+  type RowSelectionState,
+  useReactTable,
+} from '@tanstack/react-table'
+import {
+  downloadDemoExcelTemplate,
+  exportDemoExcel,
+  importDemoExcel,
+  type DemoExcelImportResult,
+} from '@/services/demo-excel'
+import { FileDown, Loader2, Upload } from 'lucide-react'
+import { toast } from 'sonner'
+import { downloadBlob, getFilenameFromContentDisposition } from '@/lib/download'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -19,26 +27,125 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { downloadBlob, getFilenameFromContentDisposition } from '@/lib/download'
+import { Input } from '@/components/ui/input'
 import {
-  downloadDemoExcelTemplate,
-  exportDemoExcel,
-  importDemoExcel,
-  type DemoExcelImportResult,
-} from '@/services/demo-excel'
+  DataTable,
+  DataTableColumnHeader,
+  DataTableToolbar,
+} from '@/components/data-table'
+import { Main } from '@/components/layout/main'
 
 const templateHeaders = ['姓名', '手机号', '年龄', '城市']
 
+type DemoExcelRow = {
+  id: string
+  name: string
+  phone: string
+  age: string
+  city: string
+}
+
+const demoExcelRows: DemoExcelRow[] = [
+  { id: '1', name: '王五', phone: '13600000000', age: '32', city: '深圳' },
+  { id: '2', name: '赵六', phone: '13700000000', age: '25', city: '杭州' },
+  { id: '3', name: '钱七', phone: '13500000000', age: '41', city: '成都' },
+]
+
 /**
- * 渲染 Excel 导入导出示例页面，覆盖模板下载、导出、上传解析和预览。
+ * 渲染 Excel 导入导出示例页面，导入预览使用公共 DataTable 展示。
  */
 export function DemoExcel() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [importResult, setImportResult] = useState<DemoExcelImportResult | null>(null)
+  const [importResult, setImportResult] =
+    useState<DemoExcelImportResult | null>(null)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 10,
+  })
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+
+  const columns = useMemo<ColumnDef<DemoExcelRow>[]>(
+    () => [
+      {
+        id: 'select',
+        header: ({ table }) => (
+          <Checkbox
+            checked={
+              table.getIsAllPageRowsSelected() ||
+              (table.getIsSomePageRowsSelected() && 'indeterminate')
+            }
+            onCheckedChange={(value) =>
+              table.toggleAllPageRowsSelected(!!value)
+            }
+            aria-label='选择全部示例行'
+            className='translate-y-0.5'
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(!!value)}
+            aria-label='选择当前示例行'
+            className='translate-y-0.5'
+          />
+        ),
+        size: 36,
+        minSize: 36,
+        maxSize: 36,
+        enableHiding: false,
+      },
+      {
+        accessorKey: 'name',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title='姓名' />
+        ),
+        meta: { label: '姓名' },
+        enableSorting: false,
+      },
+      {
+        accessorKey: 'phone',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title='手机号' />
+        ),
+        meta: { label: '手机号' },
+        enableSorting: false,
+      },
+      {
+        accessorKey: 'age',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title='年龄' />
+        ),
+        meta: { label: '年龄' },
+        enableSorting: false,
+      },
+      {
+        accessorKey: 'city',
+        header: ({ column }) => (
+          <DataTableColumnHeader column={column} title='城市' />
+        ),
+        meta: { label: '城市' },
+        enableSorting: false,
+      },
+    ],
+    []
+  )
+
+  const table = useReactTable({
+    data: demoExcelRows,
+    columns,
+    state: { pagination, rowSelection },
+    enableRowSelection: true,
+    getRowId: (row) => row.id,
+    onPaginationChange: setPagination,
+    onRowSelectionChange: setRowSelection,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  })
 
   /**
    * 拖放文件悬停时，高亮显示拖拽上传区域。
@@ -64,6 +171,7 @@ export function DemoExcel() {
     setIsDragging(false)
 
     const file = event.dataTransfer.files?.[0]
+    // 未拖入文件时不触发导入，避免空请求。
     if (file) {
       void handleImportFile(file)
     }
@@ -76,8 +184,9 @@ export function DemoExcel() {
     try {
       const response = await downloadDemoExcelTemplate()
       const filename =
-          getFilenameFromContentDisposition(response.headers['content-disposition']) ||
-          '导入模板_示例.xlsx'
+        getFilenameFromContentDisposition(
+          response.headers['content-disposition']
+        ) || '导入模板_示例.xlsx'
       downloadBlob(response.data, filename)
     } catch (error) {
       const message = error instanceof Error ? error.message : '下载模板失败'
@@ -88,13 +197,14 @@ export function DemoExcel() {
   /**
    * 导出示例 Excel，导出期间禁用按钮防止重复请求。
    */
-  async function handleExport() {
+  async function handleExport(selectedIds: string[]) {
     setExporting(true)
     try {
-      const response = await exportDemoExcel()
+      const response = await exportDemoExcel(selectedIds)
       const filename =
-          getFilenameFromContentDisposition(response.headers['content-disposition']) ||
-          '导出_示例.xlsx'
+        getFilenameFromContentDisposition(
+          response.headers['content-disposition']
+        ) || '导出_示例.xlsx'
       downloadBlob(response.data, filename)
     } catch (error) {
       const message = error instanceof Error ? error.message : '导出失败'
@@ -142,121 +252,105 @@ export function DemoExcel() {
   }
 
   return (
-    <>
-      <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
-        <div>
-          <h2 className='text-2xl font-bold tracking-tight'>Excel 导入/导出</h2>
-        </div>
+    <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
+      <div>
+        <h2 className='text-2xl font-bold tracking-tight'>Excel 导入/导出</h2>
+        <p className='mt-1 text-sm text-muted-foreground'>
+          模板表头：{templateHeaders.join(' / ')}
+        </p>
+      </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>文件操作</CardTitle>
-            <CardDescription>模板表头：{templateHeaders.join(' / ')}</CardDescription>
-          </CardHeader>
-          <CardContent className='flex flex-wrap items-center gap-2'>
-            <Input
-              ref={fileInputRef}
-              type='file'
-              accept='.xlsx,.xlsm,.xltx,.xltm,.csv'
-              className='hidden'
-              onChange={handleFileChange}
-            />
+      <Input
+        ref={fileInputRef}
+        type='file'
+        accept='.xlsx,.xlsm,.xltx,.xltm,.csv'
+        className='hidden'
+        onChange={handleFileChange}
+      />
+
+      <div className='flex flex-1 flex-col gap-4'>
+        <DataTableToolbar
+          table={table}
+          searchPlaceholder='筛选姓名...'
+          searchKey='name'
+          importAction={{
+            onClick: () => setImportDialogOpen(true),
+            isLoading: importing,
+            disabled: importing,
+          }}
+          exportAction={{
+            onClick: (selectedIds) => void handleExport(selectedIds),
+            isLoading: exporting,
+            disabled: exporting,
+          }}
+        />
+        <DataTable table={table} emptyMessage='暂无示例数据' />
+        {importResult && (
+          <div className='flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground'>
+            <span>最近一次导入解析成功，共 {importResult.total} 行。</span>
             <Button
               type='button'
-              variant='outline'
-              onClick={() => setImportDialogOpen(true)}
+              variant='ghost'
+              size='sm'
+              onClick={() => setImportResult(null)}
             >
-              <Upload />
-              导入
+              清空
             </Button>
-            <Button type='button' variant='outline' onClick={handleDownloadTemplate}>
-              <FileDown />
-              下载模板
-            </Button>
-            <Button type='button' disabled={exporting} onClick={handleExport}>
-              <Download />
-              {exporting ? '导出中' : '导出'}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* 导入 Dialog 弹窗，支持拖拽文件与模板下载 */}
-        <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-          <DialogContent className='sm:max-w-md'>
-            <DialogHeader>
-              <DialogTitle>导入</DialogTitle>
-              <DialogDescription>
-                将 Excel 文件拖拽到虚线框内，或点击框体选择本地文件。
-              </DialogDescription>
-            </DialogHeader>
-
-            <div
-              className={cn(
-                'flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 text-center transition-colors cursor-pointer',
-                isDragging
-                  ? 'border-primary bg-primary/5'
-                  : 'border-muted-foreground/20 hover:border-primary/50 hover:bg-muted/10',
-                importing && 'pointer-events-none opacity-50'
-              )}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className='mx-auto h-8 w-8 text-muted-foreground' />
-              <p className='mt-2 text-sm text-muted-foreground'>
-                将 Excel 文件拖拽到此处，或点击选择文件上传
-              </p>
-              <p className='mt-1 text-xs text-muted-foreground/70'>
-                支持 .xlsx/.xlsm/.xltx/.xltm/.csv
-              </p>
-            </div>
-
-            <div className='flex items-center justify-between mt-2'>
-              <Button
-                type='button'
-                variant='link'
-                onClick={handleDownloadTemplate}
-                className='p-0 h-auto text-xs'
-              >
-                <FileDown className='size-3.5 mr-1' />
-                下载导入模板
-              </Button>
-              {importing && (
-                <span className='flex items-center text-xs text-muted-foreground'>
-                  <Loader2 className='animate-spin size-3 mr-1 animate-duration-1000' />
-                  正在解析，请稍候...
-                </span>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {importResult && (
-          <Card>
-            <CardHeader className='items-start gap-3 sm:flex sm:flex-row sm:justify-between'>
-              <div>
-                <CardTitle>导入预览</CardTitle>
-                <CardDescription>共 {importResult.total} 行，显示前 5 行。</CardDescription>
-              </div>
-              <Button
-                type='button'
-                variant='outline'
-                size='sm'
-                onClick={() => setImportResult(null)}
-              >
-                <X />
-                清空
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <pre className='max-h-96 overflow-auto rounded-md border bg-muted/40 p-3 text-sm'>
-                {JSON.stringify(importResult.preview, null, 2)}
-              </pre>
-            </CardContent>
-          </Card>
+          </div>
         )}
-      </Main>
-    </>
+      </div>
+
+      {/* 导入 Dialog 弹窗，支持拖拽文件与模板下载。 */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className='sm:max-w-md'>
+          <DialogHeader>
+            <DialogTitle>导入</DialogTitle>
+            <DialogDescription>
+              将 Excel 文件拖拽到虚线框内，或点击框体选择本地文件。
+            </DialogDescription>
+          </DialogHeader>
+
+          <div
+            className={cn(
+              'flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 text-center transition-colors',
+              isDragging
+                ? 'border-primary bg-primary/5'
+                : 'border-muted-foreground/20 hover:border-primary/50 hover:bg-muted/10',
+              importing && 'pointer-events-none opacity-50'
+            )}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload className='mx-auto h-8 w-8 text-muted-foreground' />
+            <p className='mt-2 text-sm text-muted-foreground'>
+              将 Excel 文件拖拽到此处，或点击选择文件上传
+            </p>
+            <p className='mt-1 text-xs text-muted-foreground/70'>
+              支持 .xlsx/.xlsm/.xltx/.xltm/.csv
+            </p>
+          </div>
+
+          <div className='mt-2 flex items-center justify-between'>
+            <Button
+              type='button'
+              variant='link'
+              onClick={() => void handleDownloadTemplate()}
+              className='h-auto p-0 text-xs'
+            >
+              <FileDown className='mr-1 size-3.5' />
+              下载导入模板
+            </Button>
+            {importing && (
+              <span className='flex items-center text-xs text-muted-foreground'>
+                <Loader2 className='mr-1 size-3 animate-spin' />
+                正在解析，请稍候...
+              </span>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </Main>
   )
 }

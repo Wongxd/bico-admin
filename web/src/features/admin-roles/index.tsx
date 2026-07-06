@@ -418,7 +418,7 @@ export function AdminRoles() {
             emptyMessage='暂无角色数据'
           />
           {canDelete && (
-            <DataTableBulkActions table={table} entityName='角色'>
+            <DataTableBulkActions table={table}>
               <Button
                 type='button'
                 variant='destructive'
