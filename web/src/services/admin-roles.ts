@@ -10,7 +10,6 @@ export interface Permission {
 export interface AdminRole {
   id: number
   name: string
-  code: string
   description: string
   enabled: boolean
   permissions?: string[]
@@ -22,7 +21,6 @@ interface AdminRoleListParams {
   page?: number
   pageSize?: number
   name?: string
-  code?: string
   enabled?: boolean
   sortField?: string
   sortOrder?: string
@@ -30,7 +28,6 @@ interface AdminRoleListParams {
 
 interface AdminRoleFormValues {
   name: string
-  code?: string
   description: string
   enabled: boolean
   permissions?: string[]
@@ -78,11 +75,11 @@ export async function createAdminRole(data: AdminRoleFormValues) {
 }
 
 /**
- * 更新角色基础信息，后端不允许修改角色代码，因此这里不发送 code。
+ * 更新角色基础信息，只提交当前表单允许变更的字段。
  */
 export async function updateAdminRole(
   id: number,
-  data: Omit<AdminRoleFormValues, 'code' | 'permissions'>
+  data: Omit<AdminRoleFormValues, 'permissions'>
 ) {
   const response = await api.put<ApiResponse<AdminRole>>(
     buildApiUrl(`/admin-roles/${id}`),

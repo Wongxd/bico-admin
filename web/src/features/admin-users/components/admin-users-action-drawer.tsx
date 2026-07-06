@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent, type ReactNode } from 'react'
+import { useEffect, useState, type ChangeEvent } from 'react'
 import { z } from 'zod'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -48,6 +48,7 @@ import {
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import { PasswordInput } from '@/components/password-input'
+import { RequiredLabel } from '@/components/required-label'
 
 const formSchema = z
   .object({
@@ -158,20 +159,6 @@ function getUserInitials(user?: Pick<AdminUser, 'name' | 'username'>) {
  */
 function createDefaultAvatar() {
   return `https://api.dicebear.com/9.x/thumbs/png?seed=${Math.random()}`
-}
-
-/**
- * 渲染表单必填标识，只用于当前校验规则要求用户必须填写的字段。
- */
-function RequiredLabel({ children }: { children: ReactNode }) {
-  return (
-    <span className='inline-flex items-center gap-1'>
-      {children}
-      <span className='text-destructive' aria-hidden='true'>
-        *
-      </span>
-    </span>
-  )
 }
 
 /**

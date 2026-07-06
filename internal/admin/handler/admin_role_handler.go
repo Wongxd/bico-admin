@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -32,9 +33,6 @@ func NewAdminRoleHandler(db *gorm.DB, cacheInvalidator service.AuthCacheInvalida
 		query := db.Model(&model.AdminRole{})
 		if req.Name != "" {
 			query = query.Where("name LIKE ?", "%"+req.Name+"%")
-		}
-		if req.Code != "" {
-			query = query.Where("code LIKE ?", "%"+req.Code+"%")
 		}
 		if req.Description != "" {
 			query = query.Where("description LIKE ?", "%"+req.Description+"%")
@@ -70,7 +68,8 @@ func NewAdminRoleHandler(db *gorm.DB, cacheInvalidator service.AuthCacheInvalida
 	}
 
 	h.NewModelFromCreate = func(req *createRoleReq) (*model.AdminRole, error) {
-		exists, err := crud.Exists(db, &model.AdminRole{}, "code = ?", req.Code)
+		roleCode := buildRoleCode(req.Code)
+		exists, err := crud.Exists(db, &model.AdminRole{}, "code = ?", roleCode)
 		if err != nil {
 			return nil, err
 		}
@@ -87,7 +86,7 @@ func NewAdminRoleHandler(db *gorm.DB, cacheInvalidator service.AuthCacheInvalida
 		}
 		return &model.AdminRole{
 			Name:        req.Name,
-			Code:        req.Code,
+			Code:        roleCode,
 			Description: req.Description,
 			Enabled:     req.Enabled == nil || *req.Enabled,
 			Permissions: req.Permissions,
@@ -201,13 +200,12 @@ func (h *AdminRoleHandler) ModuleConfig() crud.ModuleConfig {
 type (
 	roleListReq struct {
 		Name        string `form:"name"`
-		Code        string `form:"code"`
 		Description string `form:"description"`
 		Enabled     *bool  `form:"enabled"`
 	}
 	createRoleReq struct {
 		Name        string   `json:"name" binding:"required"`
-		Code        string   `json:"code" binding:"required"`
+		Code        string   `json:"code"`
 		Description string   `json:"description"`
 		Enabled     *bool    `json:"enabled"`
 		Permissions []string `json:"permissions"`
@@ -221,6 +219,18 @@ type (
 		Permissions []string `json:"permissions"`
 	}
 )
+
+// buildRoleCode 生成角色内部代码，兼容数据库现有非空唯一字段。
+func buildRoleCode(value string) string {
+	code := strings.TrimSpace(value)
+	// 外部旧调用如果仍传入 code，则继续保留原值，避免破坏兼容性。
+	if code != "" {
+		return code
+	}
+
+	// 角色代码已从产品表单移除，这里只生成内部唯一值满足现有数据库约束。
+	return fmt.Sprintf("role_%d", time.Now().UnixNano())
+}
 
 // GetPermissions 获取角色权限。
 // @Summary 获取角色权限

@@ -29,26 +29,13 @@ import {
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { RequiredLabel } from '@/components/required-label'
 
-const formSchema = z
-  .object({
-    name: z.string().min(1, '请输入角色名称'),
-    code: z.string().optional(),
-    description: z.string(),
-    enabled: z.boolean(),
-    isEdit: z.boolean(),
-  })
-  .refine(
-    (data) => {
-      // 编辑时后端不允许修改 code，因此无需校验 code。
-      if (data.isEdit) {
-        return true
-      }
-
-      return !!data.code?.trim()
-    },
-    { message: '请输入角色代码', path: ['code'] }
-  )
+const formSchema = z.object({
+  name: z.string().min(1, '请输入角色名称'),
+  description: z.string(),
+  enabled: z.boolean(),
+})
 
 type AdminRoleForm = z.infer<typeof formSchema>
 
@@ -66,20 +53,16 @@ function buildAdminRoleFormValues(currentRow?: AdminRole): AdminRoleForm {
   if (currentRow) {
     return {
       name: currentRow.name,
-      code: currentRow.code,
       description: currentRow.description ?? '',
       enabled: currentRow.enabled,
-      isEdit: true,
     }
   }
 
   // 没有当前行代表新增模式，使用空表单和默认启用状态。
   return {
     name: '',
-    code: '',
     description: '',
     enabled: true,
-    isEdit: false,
   }
 }
 
@@ -108,7 +91,7 @@ export function AdminRolesActionDrawer({
 
   const mutation = useMutation({
     mutationFn: (values: AdminRoleForm) => {
-      // 编辑模式只提交后端允许变更的字段，避免误传角色代码。
+      // 编辑模式只提交已有角色允许修改的基础字段。
       if (isEdit && currentRow) {
         return updateAdminRole(currentRow.id, {
           name: values.name,
@@ -119,7 +102,6 @@ export function AdminRolesActionDrawer({
 
       return createAdminRole({
         name: values.name,
-        code: values.code?.trim(),
         description: values.description,
         enabled: values.enabled,
         permissions: [],
@@ -166,7 +148,9 @@ export function AdminRolesActionDrawer({
               name='name'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>角色名称</FormLabel>
+                  <FormLabel>
+                    <RequiredLabel>角色名称</RequiredLabel>
+                  </FormLabel>
                   <FormControl>
                     <Input placeholder='例如：运营管理员' {...field} />
                   </FormControl>
@@ -174,21 +158,6 @@ export function AdminRolesActionDrawer({
                 </FormItem>
               )}
             />
-            {!isEdit && (
-              <FormField
-                control={form.control}
-                name='code'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>角色代码</FormLabel>
-                    <FormControl>
-                      <Input placeholder='例如：admin_operator' {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
             <FormField
               control={form.control}
               name='description'

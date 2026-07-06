@@ -56,7 +56,6 @@ const enabledFilterOptions = [
 
 const columnFilterConfig = [
   { columnId: 'name', searchKey: 'name', type: 'string' as const },
-  { columnId: 'code', searchKey: 'code', type: 'string' as const },
   { columnId: 'enabled', searchKey: 'enabled', type: 'array' as const },
 ]
 
@@ -107,7 +106,6 @@ export function AdminRoles() {
   // 查询参数计算
   const queryParams = useMemo(() => {
     const name = columnFilters.find((filter) => filter.id === 'name')?.value
-    const code = columnFilters.find((filter) => filter.id === 'code')?.value
     const enabledValues = columnFilters.find(
       (filter) => filter.id === 'enabled'
     )?.value
@@ -118,7 +116,6 @@ export function AdminRoles() {
       page: pagination.pageIndex + 1,
       pageSize: pagination.pageSize,
       name: typeof name === 'string' && name.trim() ? name.trim() : undefined,
-      code: typeof code === 'string' && code.trim() ? code.trim() : undefined,
       enabled: enabledList.length === 1 ? enabledList[0] === 'true' : undefined,
       sortField: sort ? sort.id : undefined,
       sortOrder: sort ? (sort.desc ? 'descend' : 'ascend') : undefined,
@@ -209,21 +206,6 @@ export function AdminRoles() {
             'inset-s-9 ps-0.5 max-md:sticky @4xl/content:table-cell @4xl/content:drop-shadow-none'
           ),
         },
-        enableSorting: false,
-      },
-      {
-        accessorKey: 'code',
-        header: ({ column }) => (
-          <DataTableColumnHeader column={column} title='角色代码' />
-        ),
-        meta: {
-          label: '角色代码',
-        },
-        cell: ({ row }) => (
-          <code className='rounded bg-muted px-1.5 py-0.5 text-xs'>
-            {row.getValue('code')}
-          </code>
-        ),
         enableSorting: false,
       },
       {
@@ -402,7 +384,6 @@ export function AdminRoles() {
             searchKey='name'
             onRefresh={() => void rolesQuery.refetch()}
             isRefreshing={rolesQuery.isFetching}
-            textFilters={[{ columnId: 'code', placeholder: '筛选角色代码...' }]}
             filters={[
               {
                 columnId: 'enabled',
