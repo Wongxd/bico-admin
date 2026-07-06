@@ -15,6 +15,60 @@ import { errorConfig } from "./requestErrorConfig";
 const loginPath = LOGIN_PATH;
 
 /**
+ * MobileDrawerScrollLocker 监听 ProLayout 移动端侧边栏，打开时锁住页面滚动。
+ */
+const MobileDrawerScrollLocker: React.FC = () => {
+    React.useEffect(() => {
+        // 运行时布局只在浏览器里同步滚动状态，避免非浏览器环境访问 DOM。
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        const mobileQuery = window.matchMedia("(max-width: 768px)");
+        const body = document.body;
+        const html = document.documentElement;
+        const initialBodyOverflow = body.style.overflow;
+        const initialHtmlOverflow = html.style.overflow;
+
+        /**
+         * syncScrollLock 根据当前视口和 Drawer 打开状态同步滚动锁。
+         */
+        const syncScrollLock = () => {
+            const hasOpenDrawer = !!document.querySelector(".ant-drawer-open");
+            // 只有移动端打开抽屉时才锁滚动，避免影响桌面端弹层和普通页面滚动。
+            if (mobileQuery.matches && hasOpenDrawer) {
+                body.style.overflow = "hidden";
+                html.style.overflow = "hidden";
+                return;
+            }
+
+            // 抽屉关闭或离开移动端时恢复进入组件前的滚动样式。
+            body.style.overflow = initialBodyOverflow;
+            html.style.overflow = initialHtmlOverflow;
+        };
+
+        const observer = new MutationObserver(syncScrollLock);
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ["class", "style"],
+        });
+        mobileQuery.addEventListener("change", syncScrollLock);
+        syncScrollLock();
+
+        return () => {
+            observer.disconnect();
+            mobileQuery.removeEventListener("change", syncScrollLock);
+            body.style.overflow = initialBodyOverflow;
+            html.style.overflow = initialHtmlOverflow;
+        };
+    }, []);
+
+    return null;
+};
+
+/**
  * @see https://umijs.org/docs/api/runtime-config#getinitialstate
  * */
 export async function getInitialState(): Promise<{
@@ -169,6 +223,7 @@ export const layout: RunTimeLayoutConfig = ({
             // if (initialState?.loading) return <PageLoading />;
             return (
                 <>
+                    <MobileDrawerScrollLocker />
                     {children}
                     {initialState?.appConfig?.debug && (
                         <SettingDrawer
