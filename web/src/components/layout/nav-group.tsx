@@ -54,7 +54,7 @@ export function NavGroup({ items }: NavGroupProps) {
   function handleItemSelect(nextHref: string) {
     const nextActiveKey = findActiveCollapsibleKey(items, nextHref)
     setAccordionState({
-      href: nextHref,
+      href,
       openKeys: nextActiveKey ? [nextActiveKey] : [],
     })
   }
@@ -131,7 +131,7 @@ function SidebarMenuSubContent({
   function handleItemSelect(nextHref: string) {
     const nextActiveKey = findActiveCollapsibleKey(items, nextHref)
     setAccordionState({
-      href: nextHref,
+      href,
       openKeys: nextActiveKey ? [nextActiveKey] : [],
     })
     onItemSelect(nextHref)
@@ -354,14 +354,15 @@ function SidebarMenuCollapsedDropdown({
 }
 
 /**
- * 父菜单点击只展开或收起自身，不触发同层互斥；叶子菜单选中后再统一收拢。
+ * 父级菜单点击只切换自身展开状态，不触发同层互斥；同层互斥只在叶子菜单选中后执行。
  */
 function toggleOpenKey(openKeys: string[], key: string, open: boolean) {
-  // 展开时保留其它已展开项，让用户可以在选中前自由浏览多个分组。
+  // 展开父级菜单时保留其它已展开项，避免用户浏览菜单结构时被动收起上下文。
   if (open) {
     return openKeys.includes(key) ? openKeys : [...openKeys, key]
   }
 
+  // 收起父级菜单时只移除当前项，选中菜单切换时的互斥由 handleItemSelect 单独负责。
   return openKeys.filter((openKey) => openKey !== key)
 }
 

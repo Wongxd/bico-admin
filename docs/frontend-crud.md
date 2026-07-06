@@ -1,332 +1,245 @@
 # 前端 CRUD 开发指南
 
-> [!WARNING]
-> 本文档描述的 `CrudTable` 与基于 Ant Design Pro 的设计仅适用于旧版前端。
-> 新版前端已重构为基于 **Vite + React 19 + Tailwind CSS + shadcn/ui**。新版用户管理和角色管理的实现代码，请直接参见：
-> - 用户管理：[features/admin-users](file:///developer/golang/bico-admin/web/src/features/admin-users)
-> - 角色管理：[features/admin-roles](file:///developer/golang/bico-admin/web/src/features/admin-roles)
+前端基于 **Vite + React 19 + TanStack Router + TanStack Query + TanStack Table + Tailwind CSS + shadcn/ui**。
 
-## 快速开始
+参考实现：
+- 用户管理：`web/src/features/admin-users`
+- 角色管理：`web/src/features/admin-roles`
 
-### 最小示例
+## 文件变更范围
 
-```tsx
-import type { ProColumns } from '@ant-design/pro-components';
-import { ProFormText, ProFormSwitch } from '@ant-design/pro-components';
-import { CrudTable } from '@/components';
-import { createCrudService } from '@/services/crud';
+标准后端 CRUD 对接通常需要 **5 个手工文件**：
 
-// 1. 定义类型
-interface Article {
-  id: number;
-  title: string;
-  content: string;
-  enabled: boolean;
-}
+| 文件 | 职责 |
+|------|------|
+| `web/src/services/<module>.ts` | 定义类型、分页查询、新增、编辑、删除接口 |
+| `web/src/features/<module>/index.tsx` | 页面主体、表格列、筛选、分页、删除、权限按钮 |
+| `web/src/features/<module>/components/<module>-action-drawer.tsx` | 新增/编辑抽屉、表单校验、提交逻辑 |
+| `web/src/routes/_authenticated/<group>/<module>.tsx` | 路由、搜索参数 schema、菜单权限拦截 |
+| `web/src/components/layout/data/sidebar-data.ts` | 侧边栏菜单入口、图标、菜单权限 |
 
-// 2. 创建服务（一行搞定 CRUD API）
-const articleService = createCrudService<Article>('/articles');
+可选文件：
 
-// 3. 定义列
-const columns: ProColumns<Article>[] = [
-  { title: 'ID', dataIndex: 'id', width: 80, search: false },
-  { title: '标题', dataIndex: 'title' },
-  { title: '状态', dataIndex: 'enabled', valueType: 'switch' },
-];
+| 场景 | 额外文件 |
+|------|----------|
+| 权限配置、导入导出、分配关系等额外动作 | `features/<module>/components/<module>-xxx-drawer.tsx` |
+| 复杂树、字段转换、选择状态补齐 | `features/<module>/data/*.ts` |
+| 新增一级菜单分组 | `routes/_authenticated/<group>/index.tsx` |
+| TanStack Router 生成结果 | `web/src/routeTree.gen.ts`，自动生成，不手工维护 |
 
-// 4. 导出页面
-export default () => (
-  <CrudTable<Article>
-    title="文章"
-    permissionPrefix="content:article"
-    service={articleService}
-    columns={columns}
-    formContent={
-      <>
-        <ProFormText name="title" label="标题" rules={[{ required: true }]} />
-        <ProFormText name="content" label="内容" />
-        <ProFormSwitch name="enabled" label="状态" initialValue={true} />
-      </>
-    }
-  />
-);
-```
+结论：
+- 简单 CRUD：5 个文件
+- 带额外动作：6-7 个文件
+- 新菜单分组或复杂业务：8 个以上文件
 
-**完成！** 自动支持：列表、搜索、分页、新建、编辑、删除、权限控制。
+## 接入步骤
 
----
+### 1. 创建服务文件
 
-## 核心组件
-
-### createCrudService
-
-快速生成标准 CRUD API：
+在 `web/src/services/<module>.ts` 中定义接口类型和请求函数。
 
 ```ts
-import { createCrudService } from '@/services/crud';
+import { api } from '@/lib/api'
+import { buildApiUrl, type ApiResponse } from './auth'
 
-// 基本用法
-const service = createCrudService<Article>('/articles');
-
-// 生成的方法：
-service.list(params)        // GET /articles
-service.get(id)             // GET /articles/:id
-service.create(data)        // POST /articles
-service.update(id, data)    // PUT /articles/:id
-service.delete(id)          // DELETE /articles/:id
-```
-
-### CrudTable
-
-封装了 ProTable + 弹窗表单的完整 CRUD 页面：
-
-```tsx
-<CrudTable<T>
-  // 必填
-  title="文章"                          // 模块名称
-  permissionPrefix="content:article"   // 权限前缀
-  service={articleService}             // CRUD 服务
-  columns={columns}                    // 列配置
-  formContent={<FormFields />}         // 表单字段
-
-  // 可选
-  recordToValues={(r) => ({...})}      // 编辑时转换初始值
-  transformParams={(p) => ({...})}     // 自定义请求参数
-  rowKey="id"                          // 行 key，默认 "id"
-  scrollX={1200}                       // 横向滚动宽度
-  showCreate={true}                    // 是否显示新建按钮
-  showDeleteConfirm={true}             // 是否显示删除确认
-  toolBarExtra={[<Button />]}          // 额外工具栏按钮
-  renderActions={(record, defaults) => ...}  // 自定义操作列
-/>
-```
-
-### CrudModal
-
-统一的创建/编辑弹窗（CrudTable 内部使用，也可单独使用）：
-
-```tsx
-<CrudModal<Article>
-  title="文章"
-  open={modalOpen}
-  onOpenChange={setModalOpen}
-  record={currentRow}                  // 有值=编辑，无值=创建
-  onCreate={service.create}
-  onUpdate={service.update}
-  onSuccess={() => reload()}
-  recordToValues={(r) => ({...})}
->
-  <ProFormText name="title" label="标题" />
-</CrudModal>
-```
-
----
-
-## 权限控制
-
-CrudTable 自动处理权限，只需配置 `permissionPrefix`：
-
-```tsx
-permissionPrefix="system:admin_user"
-```
-
-自动生成的权限检查：
-- `system:admin_user:create` - 新建按钮
-- `system:admin_user:edit` - 编辑按钮
-- `system:admin_user:delete` - 删除按钮
-
----
-
-## 表单字段复用
-
-创建和编辑共用同一套表单字段，可通过 `record` 判断模式：
-
-```tsx
-const FormContent: React.FC<{ record?: Article }> = ({ record }) => {
-  const isEdit = !!record;
-  
-  return (
-    <>
-      {/* 仅创建时显示 */}
-      {!isEdit && <ProFormText name="code" label="编码" />}
-      
-      {/* 创建和编辑都显示 */}
-      <ProFormText name="title" label="标题" />
-      <ProFormSwitch name="enabled" label="状态" />
-    </>
-  );
-};
-```
-
----
-
-## 完整示例
-
-用户管理页面（约 120 行 vs 原 450+ 行）：
-
-```tsx
-import type { ProColumns } from '@ant-design/pro-components';
-import { ProFormText, ProFormSwitch, ProFormSelect } from '@ant-design/pro-components';
-import { Avatar, Tag, Space, Upload, Button, message } from 'antd';
-import { UploadOutlined } from '@ant-design/icons';
-import React, { useState, useEffect } from 'react';
-import { CrudTable } from '@/components';
-import { createCrudService } from '@/services/crud';
-import { getAllAdminRoles } from '@/services/system/admin-role';
-import { buildApiUrl } from '@/services/config';
-
-interface AdminUser {
-  id: number;
-  username: string;
-  name: string;
-  avatar: string;
-  enabled: boolean;
-  roles?: { id: number; name: string }[];
-  created_at: string;
+export interface Article {
+  id: number
+  title: string
+  enabled: boolean
+  created_at?: string
+  updated_at?: string
 }
 
-const userService = createCrudService<AdminUser>('/admin-users');
+export interface ArticleListParams {
+  page?: number
+  pageSize?: number
+  title?: string
+  enabled?: boolean
+  sortField?: string
+  sortOrder?: string
+}
 
-const columns: ProColumns<AdminUser>[] = [
-  { title: 'ID', dataIndex: 'id', width: 80, search: false },
-  { title: '用户名', dataIndex: 'username', width: 150 },
-  {
-    title: '头像',
-    dataIndex: 'avatar',
-    width: 80,
-    search: false,
-    render: (_, r) => <Avatar src={r.avatar} size={40} />,
-  },
-  { title: '姓名', dataIndex: 'name', width: 150 },
-  {
-    title: '角色',
-    dataIndex: 'roles',
-    search: false,
-    render: (_, r) => r.roles?.map((role) => (
-      <Tag key={role.id} color="blue">{role.name}</Tag>
-    )),
-  },
-  {
-    title: '状态',
-    dataIndex: 'enabled',
-    valueType: 'select',
-    valueEnum: {
-      true: { text: '启用', status: 'Success' },
-      false: { text: '禁用', status: 'Default' },
-    },
-    render: (_, r) => (
-      <Tag color={r.enabled ? 'green' : 'red'}>
-        {r.enabled ? '启用' : '禁用'}
-      </Tag>
-    ),
-  },
-  {
-    title: '创建时间',
-    dataIndex: 'created_at',
-    valueType: 'dateTime',
-    search: false,
-    sorter: true,
-  },
-];
+export interface ArticlePageData {
+  list: Article[]
+  total: number
+}
 
-const FormContent: React.FC<{ record?: AdminUser }> = ({ record }) => {
-  const isEdit = !!record;
-  const [avatarUrl, setAvatarUrl] = useState('');
+export interface ArticleFormValues {
+  title: string
+  enabled: boolean
+}
 
-  useEffect(() => {
-    setAvatarUrl(
-      record?.avatar || 
-      `https://api.dicebear.com/9.x/thumbs/png?seed=${Math.random()}`
-    );
-  }, [record]);
+/**
+ * 获取文章分页列表，并透传筛选、分页和排序参数给后端标准 CRUD 接口。
+ */
+export async function getArticles(params: ArticleListParams) {
+  const response = await api.get<ApiResponse<ArticlePageData>>(
+    buildApiUrl('/articles'),
+    { params }
+  )
+  return response.data
+}
 
-  return (
-    <>
-      {!isEdit && (
-        <>
-          <ProFormText name="username" label="用户名" rules={[{ required: true }]} />
-          <ProFormText.Password name="password" label="密码" rules={[{ required: true }]} />
-        </>
-      )}
-      <ProFormText name="name" label="姓名" />
-      
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ marginBottom: 8 }}>头像</div>
-        <Space>
-          <Avatar src={avatarUrl} size={64} />
-          <Upload
-            name="avatar"
-            showUploadList={false}
-            action={buildApiUrl('/auth/avatar')}
-            headers={{ Authorization: `Bearer ${localStorage.getItem('token')}` }}
-            onChange={(info) => {
-              if (info.file.status === 'done') {
-                setAvatarUrl(info.file.response?.data?.url);
-                message.success('上传成功');
-              }
-            }}
-          >
-            <Button icon={<UploadOutlined />}>上传</Button>
-          </Upload>
-        </Space>
-      </div>
+/**
+ * 创建文章记录，字段结构必须和后端 create request 保持一致。
+ */
+export async function createArticle(data: ArticleFormValues) {
+  const response = await api.post<ApiResponse<Article>>(
+    buildApiUrl('/articles'),
+    data
+  )
+  return response.data
+}
 
-      <ProFormSelect
-        name="roleIds"
-        label="角色"
-        mode="multiple"
-        request={async () => {
-          const res = await getAllAdminRoles();
-          return (res.data || []).map((r: any) => ({ label: r.name, value: r.id }));
-        }}
-      />
-      <ProFormSwitch name="enabled" label="状态" initialValue={true} />
-    </>
-  );
-};
+/**
+ * 更新文章记录，只提交后端允许编辑的字段。
+ */
+export async function updateArticle(id: number, data: ArticleFormValues) {
+  const response = await api.put<ApiResponse<Article>>(
+    buildApiUrl(`/articles/${id}`),
+    data
+  )
+  return response.data
+}
 
-export default function AdminUserList() {
-  return (
-    <CrudTable<AdminUser>
-      title="用户"
-      permissionPrefix="system:admin_user"
-      service={userService}
-      columns={columns}
-      formContent={<FormContent />}
-      recordToValues={(r) => ({
-        name: r.name,
-        enabled: r.enabled,
-        roleIds: r.roles?.map((role) => role.id),
-      })}
-      transformParams={(params) => ({
-        ...params,
-        enabled: params.enabled === 'true' ? true : 
-                 params.enabled === 'false' ? false : undefined,
-      })}
-    />
-  );
+/**
+ * 删除文章记录，删除前的确认交给页面层处理。
+ */
+export async function deleteArticle(id: number) {
+  const response = await api.delete<ApiResponse<null>>(
+    buildApiUrl(`/articles/${id}`)
+  )
+  return response.data
 }
 ```
 
----
+### 2. 创建路由文件
 
-## 对比
+在 `web/src/routes/_authenticated/<group>/<module>.tsx` 中接入页面和权限。
 
-| 项目 | 传统方式 | CrudTable |
-|------|----------|-----------|
-| 文件数 | 4-5 个 | 1 个 |
-| 代码行数 | 400-500 行 | ~100 行 |
-| CreateForm | 单独组件 | 合并 |
-| UpdateForm | 单独组件 | 合并 |
-| 服务定义 | 5 个函数 | 1 行 |
-| 权限控制 | 手动判断 | 自动 |
+```tsx
+import z from 'zod'
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import { Articles } from '@/features/articles'
+import { useAuthStore } from '@/stores/auth-store'
 
----
+const articlesSearchSchema = z.object({
+  page: z.number().optional().catch(1),
+  pageSize: z.number().optional().catch(10),
+  title: z.string().optional().catch(''),
+  enabled: z.array(z.enum(['true', 'false'])).optional().catch([]),
+})
 
-## 最佳实践
+export const Route = createFileRoute('/_authenticated/content/articles')({
+  beforeLoad: () => {
+    const user = useAuthStore.getState().auth.user
+    if (
+      !user?.permissions?.includes('*') &&
+      !user?.permissions?.includes('content:article:menu')
+    ) {
+      throw redirect({ to: '/403' })
+    }
+  },
+  validateSearch: articlesSearchSchema,
+  component: Articles,
+})
+```
 
-1. **类型优先** - 先定义好接口类型
-2. **列配置抽离** - 列配置建议单独定义，便于复用
-3. **表单组件化** - 复杂表单可抽成独立组件
-4. **善用 recordToValues** - 处理编辑时的数据转换
-5. **善用 transformParams** - 处理特殊的请求参数格式
+### 3. 添加侧边栏菜单
+
+在 `web/src/components/layout/data/sidebar-data.ts` 添加菜单项。
+
+```ts
+{
+  title: '文章管理',
+  url: '/content/articles',
+  icon: FileText,
+  access: 'content:article:menu',
+}
+```
+
+菜单权限必须和后端返回的 `menu` 权限一致。父级菜单如果声明 `access`，也必须保证角色拥有父级权限，否则子菜单会被整体隐藏。
+
+### 4. 创建页面主体
+
+在 `web/src/features/<module>/index.tsx` 中处理列表查询、表格状态、权限按钮和删除。
+
+页面主体应包含：
+- `getRouteApi('/_authenticated/<group>/<module>')`
+- `useTableUrlState` 同步 URL 查询参数
+- `useQuery` 获取分页数据
+- `useMutation` 删除记录
+- `useMemo<ColumnDef<T>[]>` 定义表格列
+- `DataTable`、`DataTableToolbar`、`ConfirmDialog`
+- 新增/编辑抽屉组件
+
+权限命名沿用后端 CRUD 权限：
+
+| 操作 | 权限 |
+|------|------|
+| 菜单 | `<prefix>:menu` |
+| 列表 | `<prefix>:list` |
+| 新增 | `<prefix>:add` |
+| 编辑 | `<prefix>:edit` |
+| 删除 | `<prefix>:delete` |
+
+当前页面按钮只在前端隐藏，不替代后端权限校验。
+
+### 5. 创建新增/编辑抽屉
+
+在 `web/src/features/<module>/components/<module>-action-drawer.tsx` 中处理表单。
+
+抽屉组件应包含：
+- `zod` 表单 schema
+- `react-hook-form`
+- `zodResolver`
+- `useMutation`
+- 成功后 `invalidateQueries`
+- `Sheet`、`Form`、`Input`、`Switch` 等 shadcn/ui 组件
+
+新增和编辑共用一个抽屉。编辑模式下不要提交后端不允许修改的字段。
+
+## 命名规范
+
+| 类型 | 规范 | 示例 |
+|------|------|------|
+| 服务文件 | 短横线 | `admin-users.ts` |
+| 页面目录 | 短横线 | `features/admin-users` |
+| 路由文件 | 短横线 | `system/admin-users.tsx` |
+| 主组件 | 大驼峰复数 | `AdminUsers` |
+| 抽屉组件 | `<Module>ActionDrawer` | `AdminUsersActionDrawer` |
+| queryKey | 短横线复数 | `['admin-users']` |
+| 权限前缀 | 模块冒号格式 | `system:admin_user` |
+
+## 开发检查
+
+新增 CRUD 后至少运行：
+
+```bash
+cd web
+pnpm exec eslint "src/features/<module>" "src/routes/_authenticated/<group>/<module>.tsx" "src/services/<module>.ts"
+pnpm build
+```
+
+如果 `pnpm build` 触发 `routeTree.gen.ts` 更新，保留自动生成结果。
+
+## 常见问题
+
+### 为什么不是一个文件完成？
+
+当前前端将职责拆开：服务层负责请求，路由层负责 URL 和权限入口，页面层负责表格交互，抽屉负责表单。
+
+### 什么时候需要拆更多组件？
+
+只有在表单很复杂、存在额外动作、或页面文件明显超过可读范围时才拆。不要为了“未来可能复用”提前抽象。
+
+### 侧边栏看不到菜单怎么办？
+
+先检查三处：
+1. 当前用户是否拥有 `<prefix>:menu`
+2. 父级菜单是否也声明了 `access`
+3. 后端 `/auth/current-user` 是否返回了对应权限
+
+### 查询参数为什么要写在路由里？
+
+路由 schema 负责把 URL 查询参数收窄成页面可用类型。表格筛选、分页和刷新恢复都依赖它。
