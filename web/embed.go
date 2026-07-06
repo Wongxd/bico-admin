@@ -1,8 +1,11 @@
-//go:build !stub
+//go:build embed
+// +build embed
 
 package web
 
 import "embed"
 
-//go:embed dist/*
+// DistFS 前端构建产物
+//
+//go:embed dist
 var DistFS embed.FS

@@ -1,0 +1,42 @@
+/**
+ * 认证相关类型定义
+ */
+
+export interface LoginParams {
+  username?: string;
+  password?: string;
+  captchaId?: string;
+  captchaCode?: string;
+  rememberPassword?: boolean;
+}
+
+export interface LoginResult {
+  token: string;
+}
+
+export interface CurrentUser {
+  id: number;
+  username: string;
+  name: string;
+  avatar: string;
+  enabled?: boolean;
+  is_super_admin?: boolean;
+  roles?: string[];
+  permissions?: string[];
+}
+
+export interface UpdateProfileParams {
+  username?: string;
+  name?: string;
+  avatar?: string;
+}
+
+export interface ChangePasswordParams {
+  oldPassword: string;
+  newPassword: string;
+}
+
+export interface CaptchaResult {
+  id: string;
+  image: string;
+}
