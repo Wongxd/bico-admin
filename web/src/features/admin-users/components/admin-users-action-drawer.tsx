@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent, type ReactNode } from 'react'
+import { useEffect, useState, type ChangeEvent, type ReactNode } from 'react'
 import { z } from 'zod'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -114,6 +114,37 @@ type AdminUsersActionDrawerProps = {
 }
 
 /**
+ * 根据当前用户生成表单值，确保抽屉复用时可以按本次操作模式正确回填。
+ */
+function buildAdminUserFormValues(currentRow?: AdminUser): AdminUserForm {
+  // 有当前行代表编辑模式，密码字段必须保持为空，避免误提交旧密码。
+  if (currentRow) {
+    return {
+      username: currentRow.username,
+      password: '',
+      confirmPassword: '',
+      name: currentRow.name ?? '',
+      avatar: currentRow.avatar ?? '',
+      enabled: currentRow.enabled,
+      role_ids: currentRow.roles?.map((role) => role.id) ?? [],
+      isEdit: true,
+    }
+  }
+
+  // 没有当前行代表新增模式，头像使用新的随机默认值。
+  return {
+    username: '',
+    password: '',
+    confirmPassword: '',
+    name: '',
+    avatar: createDefaultAvatar(),
+    enabled: true,
+    role_ids: [],
+    isEdit: false,
+  }
+}
+
+/**
  * 根据用户信息生成头像兜底文字。
  */
 function getUserInitials(user?: Pick<AdminUser, 'name' | 'username'>) {
@@ -169,28 +200,17 @@ export function AdminUsersActionDrawer({
 
   const form = useForm<AdminUserForm>({
     resolver: zodResolver(formSchema),
-    defaultValues: isEdit
-      ? {
-          username: currentRow.username,
-          password: '',
-          confirmPassword: '',
-          name: currentRow.name ?? '',
-          avatar: currentRow.avatar ?? '',
-          enabled: currentRow.enabled,
-          role_ids: currentRow.roles?.map((role) => role.id) ?? [],
-          isEdit,
-        }
-      : {
-          username: '',
-          password: '',
-          confirmPassword: '',
-          name: '',
-          avatar: createDefaultAvatar(),
-          enabled: true,
-          role_ids: [],
-          isEdit,
-        },
+    defaultValues: buildAdminUserFormValues(currentRow),
   })
+  const { reset } = form
+
+  useEffect(() => {
+    // 抽屉打开时按当前用户重置表单，避免复用第一次挂载时的 defaultValues。
+    if (open) {
+      reset(buildAdminUserFormValues(currentRow))
+    }
+  }, [currentRow, open, reset])
+
   const avatarPreview = useWatch({ control: form.control, name: 'avatar' })
   const mutation = useMutation({
     mutationFn: (values: AdminUserForm) => {
@@ -268,9 +288,12 @@ export function AdminUsersActionDrawer({
     <Sheet
       open={open}
       onOpenChange={(state) => {
-        form.reset()
-        setRoleComboboxOpen(false)
-        setRoleSearchValue('')
+        // 关闭时清理本次临时输入；打开时由 useEffect 负责按当前行回填。
+        if (!state) {
+          form.reset(buildAdminUserFormValues(currentRow))
+          setRoleComboboxOpen(false)
+          setRoleSearchValue('')
+        }
         onOpenChange(state)
       }}
     >

@@ -22,7 +22,6 @@ export function AppSidebar() {
   const { auth } = useAuthStore()
   const { config } = useConfigStore()
   const visibleSidebarData = getVisibleSidebarData(sidebarData, {
-    permissions: auth.user?.permissions,
     debug: config.appConfig?.debug,
   })
 

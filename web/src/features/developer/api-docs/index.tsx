@@ -1,7 +1,4 @@
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -16,11 +13,6 @@ const docOptions = [
 export function ApiDocs() {
   return (
     <>
-      <Header fixed>
-        <ThemeSwitch />
-        <ConfigDrawer />
-      </Header>
-
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
         <div>
           <h2 className='text-2xl font-bold tracking-tight'>接口文档</h2>

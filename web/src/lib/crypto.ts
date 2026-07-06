@@ -8,7 +8,7 @@ const SECRET_KEY = 'bico-admin-secret-key'
 /**
  * 加密字符串
  */
-export function encrypt(text: string): string {
+function encrypt(text: string): string {
   try {
     // 使用 Base64 与简易异或运算进行模糊加密，防止明文存储
     const encrypted = btoa(
@@ -30,7 +30,7 @@ export function encrypt(text: string): string {
 /**
  * 解密字符串
  */
-export function decrypt(encrypted: string): string {
+function decrypt(encrypted: string): string {
   try {
     // 解密前置校验，空字符串直接返回
     if (!encrypted) return ''

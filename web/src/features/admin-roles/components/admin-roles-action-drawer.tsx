@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -58,6 +59,31 @@ type AdminRolesActionDrawerProps = {
 }
 
 /**
+ * 根据当前行生成表单值，避免抽屉复用挂载实例时沿用上一次 defaultValues。
+ */
+function buildAdminRoleFormValues(currentRow?: AdminRole): AdminRoleForm {
+  // 有当前行代表编辑模式，需要完整回填后端返回的可编辑字段。
+  if (currentRow) {
+    return {
+      name: currentRow.name,
+      code: currentRow.code,
+      description: currentRow.description ?? '',
+      enabled: currentRow.enabled,
+      isEdit: true,
+    }
+  }
+
+  // 没有当前行代表新增模式，使用空表单和默认启用状态。
+  return {
+    name: '',
+    code: '',
+    description: '',
+    enabled: true,
+    isEdit: false,
+  }
+}
+
+/**
  * 渲染角色新增和编辑抽屉，并根据当前模式调用创建或更新接口。
  */
 export function AdminRolesActionDrawer({
@@ -69,22 +95,16 @@ export function AdminRolesActionDrawer({
   const isEdit = !!currentRow
   const form = useForm<AdminRoleForm>({
     resolver: zodResolver(formSchema),
-    defaultValues: isEdit
-      ? {
-          name: currentRow.name,
-          code: currentRow.code,
-          description: currentRow.description ?? '',
-          enabled: currentRow.enabled,
-          isEdit,
-        }
-      : {
-          name: '',
-          code: '',
-          description: '',
-          enabled: true,
-          isEdit,
-        },
+    defaultValues: buildAdminRoleFormValues(currentRow),
   })
+  const { reset } = form
+
+  useEffect(() => {
+    // 抽屉打开时按当前行重置表单，解决 defaultValues 只在首次挂载生效的问题。
+    if (open) {
+      reset(buildAdminRoleFormValues(currentRow))
+    }
+  }, [currentRow, open, reset])
 
   const mutation = useMutation({
     mutationFn: (values: AdminRoleForm) => {
@@ -124,7 +144,10 @@ export function AdminRolesActionDrawer({
     <Sheet
       open={open}
       onOpenChange={(state) => {
-        form.reset()
+        // 只在关闭时清理临时输入；打开时交给 useEffect 按当前行回填。
+        if (!state) {
+          form.reset(buildAdminRoleFormValues(currentRow))
+        }
         onOpenChange(state)
       }}
     >

@@ -12,25 +12,22 @@ import {
 } from '@tanstack/react-table'
 import { getAdminRoles, deleteAdminRole, type AdminRole } from '@/services/admin-roles'
 import { cn } from '@/lib/utils'
+import { useHasPermission } from '@/lib/permissions'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
-import { useAuthStore } from '@/stores/auth-store'
 import { toast } from 'sonner'
 import useDialogState from '@/hooks/use-dialog-state'
 
-// 布局组件
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { ThemeSwitch } from '@/components/theme-switch'
 
 // 基础 Table/Dialog 组件
 import { DataTable, DataTableToolbar, DataTableColumnHeader } from '@/components/data-table'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { LongText } from '@/components/long-text'
-import { Plus, KeyRound, Pencil, Trash2 } from 'lucide-react'
+import { KeyRound, Pencil, Trash2 } from 'lucide-react'
+import { EnabledStatusBadge } from '@/components/enabled-status-badge'
+import { ManagementPageHeader } from '@/components/management-page-header'
 
 // 子抽屉
 import { AdminRolesActionDrawer } from './components/admin-roles-action-drawer'
@@ -60,7 +57,6 @@ export function AdminRoles() {
   const search = route.useSearch()
   const navigate = route.useNavigate()
   const queryClient = useQueryClient()
-  const user = useAuthStore((state) => state.auth.user)
 
   // 对话框和行选择状态
   const [open, setOpen] = useDialogState<AdminRolesDialogType>(null)
@@ -76,10 +72,10 @@ export function AdminRoles() {
   const [sorting, setSorting] = useState<SortingState>([])
 
   // 权限检查
-  const canAdd = user?.permissions?.includes('*') || user?.permissions?.includes('system:admin_role:add')
-  const canPermission = user?.permissions?.includes('*') || user?.permissions?.includes('system:admin_role:permission')
-  const canEdit = user?.permissions?.includes('*') || user?.permissions?.includes('system:admin_role:edit')
-  const canDelete = user?.permissions?.includes('*') || user?.permissions?.includes('system:admin_role:delete')
+  const canAdd = useHasPermission('system:admin_role:create')
+  const canPermission = useHasPermission('system:admin_role:permission')
+  const canEdit = useHasPermission('system:admin_role:edit')
+  const canDelete = useHasPermission('system:admin_role:delete')
 
   // URL 状态绑定
   const {
@@ -228,18 +224,7 @@ export function AdminRoles() {
         },
         cell: ({ row }) => {
           const enabled = row.original.enabled
-          return (
-            <Badge
-              variant='outline'
-              className={cn(
-                enabled
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300'
-                  : 'border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300'
-              )}
-            >
-              {enabled ? '启用' : '禁用'}
-            </Badge>
-          )
+          return <EnabledStatusBadge enabled={enabled} />
         },
         filterFn: (row, id, value) => {
           const enabled = row.getValue<boolean>(id)
@@ -360,30 +345,16 @@ export function AdminRoles() {
 
   return (
     <>
-      <Header fixed>
-        <ThemeSwitch />
-        <ConfigDrawer />
-      </Header>
-
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
-        <div className='flex flex-wrap items-end justify-between gap-2'>
-          <div>
-            <h2 className='text-2xl font-bold tracking-tight'>角色管理</h2>
-          </div>
-          {canAdd && (
-            <Button
-              type='button'
-              onClick={() => {
-                setCurrentRow(null)
-                setOpen('add')
-              }}
-              className='space-x-1'
-            >
-              <Plus className='size-4 mr-1' />
-              <span>新增角色</span>
-            </Button>
-          )}
-        </div>
+        <ManagementPageHeader
+          title='角色管理'
+          createLabel='新增角色'
+          canCreate={canAdd}
+          onCreate={() => {
+            setCurrentRow(null)
+            setOpen('add')
+          }}
+        />
 
         <div
           className={cn(

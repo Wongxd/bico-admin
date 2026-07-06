@@ -1,7 +1,7 @@
 import { api } from '@/lib/api'
 
 // API 统一前缀
-export const API_PREFIX = '/admin-api'
+const API_PREFIX = '/admin-api'
 
 /**
  * 组装完整的 API 请求路径
@@ -11,7 +11,7 @@ export function buildApiUrl(path: string): string {
   return `${API_PREFIX}${normalizedPath}`
 }
 
-export interface LoginParams {
+interface LoginParams {
   username?: string
   password?: string
   captchaId?: string
@@ -19,7 +19,7 @@ export interface LoginParams {
   rememberPassword?: boolean
 }
 
-export interface LoginResult {
+interface LoginResult {
   token: string
 }
 
@@ -33,21 +33,21 @@ export interface CurrentUser {
   permissions?: string[]
 }
 
-export interface UpdateProfileParams {
+interface UpdateProfileParams {
   name: string
   avatar: string
 }
 
-export interface UploadAvatarResult {
+interface UploadAvatarResult {
   url: string
 }
 
-export interface ChangePasswordParams {
+interface ChangePasswordParams {
   oldPassword: string
   newPassword: string
 }
 
-export interface CaptchaResult {
+interface CaptchaResult {
   id: string
   image: string
 }

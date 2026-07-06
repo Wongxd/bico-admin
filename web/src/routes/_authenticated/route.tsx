@@ -17,7 +17,7 @@ export const Route = createFileRoute('/_authenticated')({
     }
 
     // 如果有 Token 但没有用户信息，前置拉取并填充，保障子路由权限校验有效。
-    let user = useAuthStore.getState().auth.user
+    const user = useAuthStore.getState().auth.user
     if (!user) {
       const response = await getCurrentUser()
       if (response.code === 0 && response.data) {

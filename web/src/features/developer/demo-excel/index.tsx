@@ -2,10 +2,7 @@ import { useRef, useState, type ChangeEvent } from 'react'
 import { toast } from 'sonner'
 import { Download, FileDown, Loader2, Upload, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { ThemeSwitch } from '@/components/theme-switch'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -146,11 +143,6 @@ export function DemoExcel() {
 
   return (
     <>
-      <Header fixed>
-        <ThemeSwitch />
-        <ConfigDrawer />
-      </Header>
-
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
         <div>
           <h2 className='text-2xl font-bold tracking-tight'>Excel 导入/导出</h2>

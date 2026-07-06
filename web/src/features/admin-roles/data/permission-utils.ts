@@ -69,7 +69,7 @@ export function filterPermissionsByLabel(
 /**
  * 查找指定权限的父级链路，用于保存时补齐父级权限。
  */
-export function findPermissionParents(
+function findPermissionParents(
   key: string,
   tree: Permission[],
   path: string[] = []

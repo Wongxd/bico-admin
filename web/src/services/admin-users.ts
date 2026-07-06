@@ -18,7 +18,7 @@ export interface AdminUser {
   updated_at?: string
 }
 
-export interface AdminUserListParams {
+interface AdminUserListParams {
   page?: number
   pageSize?: number
   username?: string
@@ -28,12 +28,12 @@ export interface AdminUserListParams {
   sortOrder?: string
 }
 
-export interface AdminUserPageData {
+interface AdminUserPageData {
   list: AdminUser[]
   total: number
 }
 
-export interface CreateAdminUserParams {
+interface CreateAdminUserParams {
   username: string
   password: string
   name: string
@@ -42,7 +42,7 @@ export interface CreateAdminUserParams {
   role_ids: number[]
 }
 
-export interface UpdateAdminUserParams {
+interface UpdateAdminUserParams {
   name: string
   avatar: string
   enabled: boolean

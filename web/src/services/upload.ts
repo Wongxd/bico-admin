@@ -3,7 +3,7 @@ import { buildApiUrl, type ApiResponse } from './auth'
 
 export type UploadType = 'image' | 'video'
 
-export interface EditorUploadResult {
+interface EditorUploadResult {
   url: string
 }
 

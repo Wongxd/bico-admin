@@ -18,7 +18,7 @@ export interface AdminRole {
   updated_at?: string
 }
 
-export interface AdminRoleListParams {
+interface AdminRoleListParams {
   page?: number
   pageSize?: number
   name?: string
@@ -28,7 +28,7 @@ export interface AdminRoleListParams {
   sortOrder?: string
 }
 
-export interface AdminRoleFormValues {
+interface AdminRoleFormValues {
   name: string
   code?: string
   description: string
@@ -36,12 +36,12 @@ export interface AdminRoleFormValues {
   permissions?: string[]
 }
 
-export interface AdminRolePageData {
+interface AdminRolePageData {
   list: AdminRole[]
   total: number
 }
 
-export interface RolePermissionsData {
+interface RolePermissionsData {
   permissions: string[]
 }
 

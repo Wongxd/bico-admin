@@ -34,7 +34,7 @@ import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
 import { uploadForEditor, type UploadType } from '@/services/upload'
 
-export interface RichEditorProps {
+interface RichEditorProps {
   value?: string
   onChange?: (html: string) => void
   disabled?: boolean

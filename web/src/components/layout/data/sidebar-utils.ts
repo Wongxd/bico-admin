@@ -1,20 +1,8 @@
 import { type SidebarData, type NavGroup, type NavItem, type NavLink } from '../types'
+import { canAccessPermission } from '@/lib/permissions'
 
 type SidebarFilterOptions = {
-  permissions?: string[]
   debug?: boolean
-}
-
-/**
- * 判断当前用户是否拥有指定权限，星号权限代表超级权限。
- */
-function hasPermission(permissions: string[], access?: string) {
-  // 没有声明权限的菜单仅受其他条件控制，避免把普通页面误隐藏。
-  if (!access) {
-    return true
-  }
-
-  return permissions.includes('*') || permissions.includes(access)
 }
 
 /**
@@ -26,7 +14,7 @@ function canShowItem(item: NavItem, options: Required<SidebarFilterOptions>) {
     return false
   }
 
-  return hasPermission(options.permissions, item.access)
+  return canAccessPermission(item.access)
 }
 
 /**
@@ -69,7 +57,6 @@ export function getVisibleSidebarData(
   options: SidebarFilterOptions
 ): SidebarData {
   const normalizedOptions: Required<SidebarFilterOptions> = {
-    permissions: options.permissions ?? [],
     debug: options.debug ?? false,
   }
 

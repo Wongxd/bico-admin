@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { getCookie } from '@/lib/cookies'
 import { cn } from '@/lib/utils'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
+import { AppHeader } from '@/components/layout/app-header'
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { SkipToMain } from '@/components/skip-to-main'
 
@@ -67,6 +68,7 @@ export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
           'peer-data-[variant=inset]:has-data-[layout=fixed]:h-[calc(100svh-(var(--spacing)*4))]'
         )}
       >
+        <AppHeader />
         {children ?? <Outlet />}
       </SidebarInset>
     </SidebarProvider>

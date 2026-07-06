@@ -1,7 +1,7 @@
 import z from 'zod'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { AdminUsers } from '@/features/admin-users'
-import { useAuthStore } from '@/stores/auth-store'
+import { hasPermission } from '@/lib/permissions'
 
 const adminUsersSearchSchema = z.object({
   page: z.number().optional().catch(1),
@@ -13,11 +13,7 @@ const adminUsersSearchSchema = z.object({
 
 export const Route = createFileRoute('/_authenticated/system/admin-users')({
   beforeLoad: () => {
-    const user = useAuthStore.getState().auth.user
-    if (
-      !user?.permissions?.includes('*') &&
-      !user?.permissions?.includes('system:admin_user:menu')
-    ) {
+    if (!hasPermission('system:admin_user:menu')) {
       throw redirect({ to: '/403' })
     }
   },

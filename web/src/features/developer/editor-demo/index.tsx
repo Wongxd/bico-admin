@@ -1,9 +1,6 @@
 import { useState } from 'react'
-import { ConfigDrawer } from '@/components/config-drawer'
-import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { RichEditor } from '@/components/rich-editor'
-import { ThemeSwitch } from '@/components/theme-switch'
 import {
   Card,
   CardContent,
@@ -20,11 +17,6 @@ export function EditorDemo() {
 
   return (
     <>
-      <Header fixed>
-        <ThemeSwitch />
-        <ConfigDrawer />
-      </Header>
-
       <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
         <div>
           <h2 className='text-2xl font-bold tracking-tight'>编辑器示例</h2>
