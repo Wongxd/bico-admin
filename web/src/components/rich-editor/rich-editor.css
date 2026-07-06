@@ -1,0 +1,59 @@
+.rich-editor .ProseMirror {
+  min-height: inherit;
+  outline: none;
+}
+
+.rich-editor .ProseMirror > *:first-child {
+  margin-top: 0;
+}
+
+.rich-editor .ProseMirror > *:last-child {
+  margin-bottom: 0;
+}
+
+.rich-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+}
+
+.rich-editor blockquote {
+  margin: 12px 0;
+  padding-left: 12px;
+  border-left: 3px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+}
+
+.rich-editor pre {
+  padding: 12px;
+  border-radius: 6px;
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+  white-space: pre-wrap;
+}
+
+.rich-editor code {
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: hsl(var(--muted));
+}
+
+.rich-editor pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.rich-editor-image,
+.rich-editor-video {
+  display: block;
+  max-width: 100%;
+  margin: 12px 0;
+}
+
+.rich-editor-video {
+  width: 100%;
+  max-height: 420px;
+  background: #000;
+}

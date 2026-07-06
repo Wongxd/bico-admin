@@ -1,24 +1,12 @@
 {
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ],
   "compilerOptions": {
-    "target": "esnext",
-    "moduleResolution": "bundler",
-    "jsx": "react-jsx",
-    "esModuleInterop": true,
-    "experimentalDecorators": true,
-    "strict": true,
-    "forceConsistentCasingInFileNames": true,
-    "noImplicitReturns": true,
-    "declaration": true,
-    "skipLibCheck": true,
-    "resolveJsonModule": true,
-    "types": ["node"],
     "paths": {
-      "@/*": ["./src/*"],
-      "@@/*": ["./src/.umi/*"],
-      "@@test/*": ["./src/.umi-test/*"],
-      "@root/*": ["./*"]
+      "@/*": ["./src/*"]
     }
-  },
-  "include": ["./**/*.d.ts", "./**/*.ts", "./**/*.tsx"],
-  "exclude": ["node_modules", "dist", "config"]
+  }
 }

@@ -1,6 +1,10 @@
 # 前端 CRUD 开发指南
 
-> 使用 `CrudTable` 和 `createCrudService`，一个页面只需 ~100 行代码。
+> [!WARNING]
+> 本文档描述的 `CrudTable` 与基于 Ant Design Pro 的设计仅适用于旧版前端。
+> 新版前端已重构为基于 **Vite + React 19 + Tailwind CSS + shadcn/ui**。新版用户管理和角色管理的实现代码，请直接参见：
+> - 用户管理：[features/admin-users](file:///developer/golang/bico-admin/web/src/features/admin-users)
+> - 角色管理：[features/admin-roles](file:///developer/golang/bico-admin/web/src/features/admin-roles)
 
 ## 快速开始
 

@@ -14,11 +14,12 @@
 
 ### 前端
 - **[React 19](https://react.dev/)** - UI 框架
-- **[Ant Design Pro](https://pro.ant.design/)** - 企业级中后台解决方案
-- **[UmiJS 4](https://umijs.org/)** - 企业级前端框架
+- **[Tailwind CSS](https://tailwindcss.com/)** - 样式框架
+- **[shadcn/ui](https://ui.shadcn.com/)** - UI 组件库
+- **[TanStack Router](https://tanstack.com/router)** - 文件系统路由
+- **[Zustand](https://github.com/pmndrs/zustand)** - 状态管理
 - **[TypeScript](https://www.typescriptlang.org/)** - 类型安全
-- **[TipTap](https://tiptap.dev/)** - 富文本编辑器
-- **[Bun](https://bun.sh/)** - 包管理器
+- **[pnpm](https://pnpm.io/)** - 包管理器
 
 ## 快速开始
 
@@ -41,13 +42,13 @@ make serve
 cd web
 
 # 安装依赖
-bun install
+pnpm install
 
 # 启动开发服务器
-bun dev
+pnpm run dev
 
 # 构建生产版本
-bun run build
+pnpm run build
 ```
 
 ## 开发指南
@@ -118,15 +119,7 @@ return []crud.Module{
 
 ### 前端路由
 
-在 `web/config/routes.ts` 配置：
-```ts
-{
-  path: "/system/articles",
-  name: "articles",
-  component: "./system/articles",
-  access: "system:article:menu"  // 对应后端权限 key
-}
-```
+新版前端路由基于 **[TanStack Router](https://tanstack.com/router)** 文件式路由系统。路由文件直接定义在 `web/src/routes/` 目录中。各路由通过 `beforeLoad` 钩子注入权限校验，支持与后端权限对齐（如通过 `user.permissions` 进行校验）。
 
 ## 常用命令
 
@@ -144,7 +137,6 @@ make tidy      # 整理依赖
 详细文档位于 `docs/` 目录：
 
 - [后端 CRUD 框架](./docs/crud-pkg.md) - 声明式后端开发指南
-- [前端 CRUD 组件](./docs/frontend-crud.md) - CrudTable 使用指南
 - [项目结构说明](./docs/structure.md)
 - [认证 API](./docs/auth-api.md)
 - [缓存机制](./docs/cache.md)
@@ -156,7 +148,7 @@ make tidy      # 整理依赖
 - Go 1.21+
 - MySQL 5.7+
 - Node.js 20+
-- Bun 1.0+ (前端包管理器)
+- pnpm 9.0+ (前端包管理器)
 
 ## License
 

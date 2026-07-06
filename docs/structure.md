@@ -90,18 +90,18 @@ bico-admin/
 │       └── migrate.go       # 统一管理所有模型的 AutoMigrate
 │
 ├── web/                      # 前端项目
-│   ├── config/              # 配置文件
-│   │   ├── routes.ts        # 路由配置
-│   │   ├── config.ts        # 构建配置
-│   │   └── proxy.ts         # 代理配置
 │   ├── src/                 # 源代码
-│   │   ├── app.tsx          # 应用入口
-│   │   ├── access.ts        # 权限控制
-│   │   ├── components/      # 公共组件
-│   │   ├── pages/          # 页面组件
-│   │   ├── services/       # API服务
-│   │   └── locales/        # 国际化
-│   └── package.json
+│   │   ├── components/      # 通用组件与布局组件
+│   │   ├── context/         # 全局上下文 (如 LayoutProvider)
+│   │   ├── features/        # 业务逻辑功能分块 (用户管理/角色管理等)
+│   │   ├── hooks/           # 自定义 React Hooks
+│   │   ├── lib/             # 工具函数 (如下载、辅助函数)
+│   │   ├── routes/          # TanStack Router 文件路由定义
+│   │   ├── services/        # 接口 API 服务请求
+│   │   ├── stores/          # Zustand 状态管理 Store
+│   │   └── main.tsx         # 前端渲染主入口
+│   ├── package.json
+│   └── vite.config.ts        # Vite 配置文件
 │
 ├── docs/                     # 项目文档
 │   ├── structure.md         # 本文档（项目结构）
