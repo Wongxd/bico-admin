@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getRouteApi } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { getRouteApi } from '@tanstack/react-router'
 import {
   type ColumnOrderState,
   type ColumnPinningState,
@@ -10,32 +10,44 @@ import {
   useReactTable,
   type ColumnDef,
 } from '@tanstack/react-table'
-import { getAdminRoles, deleteAdminRole, type AdminRole } from '@/services/admin-roles'
-import { cn } from '@/lib/utils'
-import { useHasPermission } from '@/lib/permissions'
-import { useTableUrlState } from '@/hooks/use-table-url-state'
-import { toast } from 'sonner'
-import useDialogState from '@/hooks/use-dialog-state'
-
-import { Main } from '@/components/layout/main'
-
-// 基础 Table/Dialog 组件
-import { DataTable, DataTableToolbar, DataTableColumnHeader } from '@/components/data-table'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Button } from '@/components/ui/button'
-import { ConfirmDialog } from '@/components/confirm-dialog'
-import { LongText } from '@/components/long-text'
+import {
+  getAdminRoles,
+  deleteAdminRole,
+  deleteAdminRoles,
+  type AdminRole,
+} from '@/services/admin-roles'
 import { KeyRound, Pencil, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { useHasPermission } from '@/lib/permissions'
+import { cn } from '@/lib/utils'
+import useDialogState from '@/hooks/use-dialog-state'
+import { useTableUrlState } from '@/hooks/use-table-url-state'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { ConfirmDialog } from '@/components/confirm-dialog'
+// 基础 Table/Dialog 组件
+import {
+  DataTable,
+  DataTableBulkActions,
+  DataTableToolbar,
+  DataTableColumnHeader,
+} from '@/components/data-table'
 import { EnabledStatusBadge } from '@/components/enabled-status-badge'
+import { Main } from '@/components/layout/main'
+import { LongText } from '@/components/long-text'
 import { ManagementPageHeader } from '@/components/management-page-header'
-
 // 子抽屉
 import { AdminRolesActionDrawer } from './components/admin-roles-action-drawer'
 import { AdminRolesPermissionsDrawer } from './components/admin-roles-permissions-drawer'
 
 const route = getRouteApi('/_authenticated/system/admin-roles')
 
-type AdminRolesDialogType = 'add' | 'edit' | 'delete' | 'permissions'
+type AdminRolesDialogType =
+  | 'add'
+  | 'edit'
+  | 'delete'
+  | 'deleteBatch'
+  | 'permissions'
 
 const enabledFilterOptions = [
   { label: '启用', value: 'true' },
@@ -96,7 +108,9 @@ export function AdminRoles() {
   const queryParams = useMemo(() => {
     const name = columnFilters.find((filter) => filter.id === 'name')?.value
     const code = columnFilters.find((filter) => filter.id === 'code')?.value
-    const enabledValues = columnFilters.find((filter) => filter.id === 'enabled')?.value
+    const enabledValues = columnFilters.find(
+      (filter) => filter.id === 'enabled'
+    )?.value
     const enabledList = Array.isArray(enabledValues) ? enabledValues : []
     const sort = sorting[0]
 
@@ -132,6 +146,17 @@ export function AdminRoles() {
     },
   })
 
+  // 批量删除 Mutation
+  const deleteBatchMutation = useMutation({
+    mutationFn: (ids: number[]) => deleteAdminRoles(ids),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin-roles'] })
+      setRowSelection({})
+      toast.success('角色已批量删除')
+      setOpen(null)
+    },
+  })
+
   // 表格列定义 (内聚在主组件内部，以便闭包共享 currentRow / setOpen 状态)
   const columns = useMemo<ColumnDef<AdminRole>[]>(
     () => [
@@ -143,14 +168,16 @@ export function AdminRoles() {
               table.getIsAllPageRowsSelected() ||
               (table.getIsSomePageRowsSelected() && 'indeterminate')
             }
-            onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+            onCheckedChange={(value) =>
+              table.toggleAllPageRowsSelected(!!value)
+            }
             aria-label='选择全部角色'
             className='translate-y-0.5'
           />
         ),
         meta: {
           className: cn(
-            'inset-s-0 z-10 w-9 min-w-9 max-w-9 px-2 text-center rounded-tl-[inherit] max-md:sticky'
+            'inset-s-0 z-10 w-9 max-w-9 min-w-9 rounded-tl-[inherit] px-2 text-center max-md:sticky'
           ),
         },
         cell: ({ row }) => (
@@ -246,7 +273,9 @@ export function AdminRoles() {
             return <span className='text-muted-foreground'>-</span>
           }
           return (
-            <span className='text-nowrap'>{new Date(value).toLocaleString()}</span>
+            <span className='text-nowrap'>
+              {new Date(value).toLocaleString()}
+            </span>
           )
         },
         enableSorting: true,
@@ -269,7 +298,7 @@ export function AdminRoles() {
                     setOpen('permissions')
                   }}
                 >
-                  <KeyRound className='size-4 mr-1' />
+                  <KeyRound className='mr-1 size-4' />
                   权限
                 </Button>
               )}
@@ -283,7 +312,7 @@ export function AdminRoles() {
                     setOpen('edit')
                   }}
                 >
-                  <Pencil className='size-4 mr-1' />
+                  <Pencil className='mr-1 size-4' />
                   编辑
                 </Button>
               )}
@@ -298,7 +327,7 @@ export function AdminRoles() {
                     setOpen('delete')
                   }}
                 >
-                  <Trash2 className='size-4 mr-1' />
+                  <Trash2 className='mr-1 size-4' />
                   删除
                 </Button>
               )}
@@ -329,6 +358,7 @@ export function AdminRoles() {
     manualPagination: true,
     manualSorting: true,
     enableRowSelection: true,
+    getRowId: (row) => String(row.id),
     onPaginationChange,
     onColumnFiltersChange,
     onRowSelectionChange: setRowSelection,
@@ -338,6 +368,10 @@ export function AdminRoles() {
     onColumnPinningChange: setColumnPinning,
     getCoreRowModel: getCoreRowModel(),
   })
+
+  const selectedRoleIds = table
+    .getFilteredSelectedRowModel()
+    .rows.map((row) => row.original.id)
 
   useEffect(() => {
     ensurePageInRange(pageCount)
@@ -366,6 +400,8 @@ export function AdminRoles() {
             table={table}
             searchPlaceholder='筛选角色名称...'
             searchKey='name'
+            onRefresh={() => void rolesQuery.refetch()}
+            isRefreshing={rolesQuery.isFetching}
             textFilters={[{ columnId: 'code', placeholder: '筛选角色代码...' }]}
             filters={[
               {
@@ -381,6 +417,20 @@ export function AdminRoles() {
             loadingMessage='正在加载角色...'
             emptyMessage='暂无角色数据'
           />
+          {canDelete && (
+            <DataTableBulkActions table={table} entityName='角色'>
+              <Button
+                type='button'
+                variant='destructive'
+                size='icon'
+                aria-label='批量删除角色'
+                title='批量删除角色'
+                onClick={() => setOpen('deleteBatch')}
+              >
+                <Trash2 className='size-4' />
+              </Button>
+            </DataTableBulkActions>
+          )}
         </div>
       </Main>
 
@@ -411,6 +461,20 @@ export function AdminRoles() {
         destructive
         isLoading={deleteMutation.isPending}
         handleConfirm={() => deleteMutation.mutate()}
+      />
+
+      {/* 批量删除确认框 */}
+      <ConfirmDialog
+        open={open === 'deleteBatch'}
+        onOpenChange={(v) => !v && setOpen(null)}
+        title='确定批量删除角色？'
+        desc={`删除选中的 ${selectedRoleIds.length} 个角色后，关联这些角色的用户将失去对应权限。此操作不可撤销。`}
+        cancelBtnText='取消'
+        confirmText='确定删除'
+        destructive
+        disabled={selectedRoleIds.length === 0}
+        isLoading={deleteBatchMutation.isPending}
+        handleConfirm={() => deleteBatchMutation.mutate(selectedRoleIds)}
       />
     </>
   )

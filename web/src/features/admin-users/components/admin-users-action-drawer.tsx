@@ -62,11 +62,6 @@ const formSchema = z
   })
   .refine(
     (data) => {
-      // 编辑时不允许修改 username，因此无需校验 username。
-      if (data.isEdit) {
-        return true
-      }
-
       return !!data.username?.trim()
     },
     { message: '请输入用户名', path: ['username'] }
@@ -189,6 +184,7 @@ export function AdminUsersActionDrawer({
 }: AdminUsersActionDrawerProps) {
   const queryClient = useQueryClient()
   const isEdit = !!currentRow
+  const isSuperAdmin = !!currentRow?.is_super_admin
   const [roleComboboxOpen, setRoleComboboxOpen] = useState(false)
   const [roleSearchValue, setRoleSearchValue] = useState('')
   const [isUploading, setIsUploading] = useState(false)
@@ -216,10 +212,11 @@ export function AdminUsersActionDrawer({
     mutationFn: (values: AdminUserForm) => {
       const roleIds = values.role_ids
 
-      // 编辑时只传后端允许更新的字段，密码为空则不传。
+      // 编辑时用户名也允许修改；密码为空则不传，避免误触发密码更新。
       if (isEdit && currentRow) {
         const password = values.password?.trim()
         return updateAdminUser(currentRow.id, {
+          username: values.username?.trim() ?? '',
           name: values.name,
           avatar: values.avatar,
           enabled: values.enabled,
@@ -307,23 +304,23 @@ export function AdminUsersActionDrawer({
             onSubmit={form.handleSubmit(onSubmit)}
             className='min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-1'
           >
+            <FormField
+              control={form.control}
+              name='username'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    <RequiredLabel>用户名</RequiredLabel>
+                  </FormLabel>
+                  <FormControl>
+                    <Input placeholder='请输入用户名' {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             {!isEdit && (
               <>
-                <FormField
-                  control={form.control}
-                  name='username'
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        <RequiredLabel>用户名</RequiredLabel>
-                      </FormLabel>
-                      <FormControl>
-                        <Input placeholder='请输入用户名' {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
                 <FormField
                   control={form.control}
                   name='password'
@@ -379,7 +376,7 @@ export function AdminUsersActionDrawer({
                 <FormItem>
                   <FormLabel>头像</FormLabel>
                   <div className='flex items-center gap-4'>
-                    <label className='relative flex size-16 cursor-pointer items-center justify-center rounded-full border border-border bg-muted overflow-hidden group hover:border-primary/50 transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2'>
+                    <label className='group relative flex size-16 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-border bg-muted transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:border-primary/50'>
                       <Avatar className='size-full rounded-none'>
                         <AvatarImage src={avatarPreview} alt='用户头像' />
                         <AvatarFallback className='rounded-none text-base font-semibold'>
@@ -390,16 +387,17 @@ export function AdminUsersActionDrawer({
                       {/* 悬停时的遮罩和图标 */}
                       <div
                         className={cn(
-                          'absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity',
-                          isUploading && 'opacity-100 bg-black/60 pointer-events-none'
+                          'absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100',
+                          isUploading &&
+                            'pointer-events-none bg-black/60 opacity-100'
                         )}
                       >
                         {isUploading ? (
-                          <Loader2 className='animate-spin h-5 w-5' />
+                          <Loader2 className='h-5 w-5 animate-spin' />
                         ) : (
                           <>
-                            <Camera className='h-4 w-4 mb-0.5' />
-                            <span className='text-[10px] scale-90'>修改</span>
+                            <Camera className='mb-0.5 h-4 w-4' />
+                            <span className='scale-90 text-[10px]'>修改</span>
                           </>
                         )}
                       </div>
@@ -567,6 +565,7 @@ export function AdminUsersActionDrawer({
                       </span>
                       <Switch
                         checked={field.value}
+                        disabled={isSuperAdmin}
                         onCheckedChange={field.onChange}
                       />
                     </div>

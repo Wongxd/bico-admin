@@ -28,6 +28,9 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := initAdminUser(db); err != nil {
 		return err
 	}
+	if err := ensureSuperAdminFlag(db); err != nil {
+		return err
+	}
 
 	// API 模块模型（暂无）
 
@@ -53,11 +56,12 @@ func initAdminUser(db *gorm.DB) error {
 	}
 
 	admin := adminModel.AdminUser{
-		Username: "admin",
-		Password: hashedPassword,
-		Name:     "系统管理员",
-		Avatar:   "https://api.dicebear.com/9.x/thumbs/png?seed=slowlyo",
-		Enabled:  true,
+		Username:     "admin",
+		Password:     hashedPassword,
+		Name:         "系统管理员",
+		Avatar:       "https://api.dicebear.com/9.x/thumbs/png?seed=slowlyo",
+		Enabled:      true,
+		IsSuperAdmin: true,
 	}
 
 	if err := db.Create(&admin).Error; err != nil {
@@ -66,5 +70,31 @@ func initAdminUser(db *gorm.DB) error {
 
 	logger.Info("初始化管理员账户成功", zap.String("username", "admin"), zap.String("password", "admin"))
 	logger.Info("admin 账户自动拥有所有权限，后续新增权限无需手动分配")
+	return nil
+}
+
+// ensureSuperAdminFlag 为旧数据补齐超级管理员标记，避免继续依赖用户名判断权限。
+func ensureSuperAdminFlag(db *gorm.DB) error {
+	var count int64
+	if err := db.Model(&adminModel.AdminUser{}).
+		Where("is_super_admin = ?", true).
+		Count(&count).Error; err != nil {
+		return err
+	}
+	// 已存在超级管理员标记时不再改动用户数据。
+	if count > 0 {
+		return nil
+	}
+
+	result := db.Model(&adminModel.AdminUser{}).
+		Where("username = ?", "admin").
+		Update("is_super_admin", true)
+	if result.Error != nil {
+		return result.Error
+	}
+	// 旧库没有 admin 用户时只记录告警，避免迁移阶段强行猜测某个账号为超级管理员。
+	if result.RowsAffected == 0 {
+		logger.Warn("未找到可自动标记的超级管理员账号")
+	}
 	return nil
 }

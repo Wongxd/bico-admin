@@ -57,6 +57,7 @@ func (p CRUDPerms) Routes() []Route {
 		{Method: "GET", Path: "/:id", Handler: "Get", Permission: p.List},
 		{Method: "POST", Path: "", Handler: "Create", Permission: p.Create},
 		{Method: "PUT", Path: "/:id", Handler: "Update", Permission: p.Edit},
+		{Method: "DELETE", Path: "/batch", Handler: "DeleteBatch", Permission: p.Delete},
 		{Method: "DELETE", Path: "/:id", Handler: "Delete", Permission: p.Delete},
 	}
 }
@@ -136,6 +137,7 @@ func CRUDRoutes(listPerm, createPerm, editPerm, deletePerm string) []Route {
 		{Method: "GET", Path: "/:id", Handler: "Get", Permission: listPerm},
 		{Method: "POST", Path: "", Handler: "Create", Permission: createPerm},
 		{Method: "PUT", Path: "/:id", Handler: "Update", Permission: editPerm},
+		{Method: "DELETE", Path: "/batch", Handler: "DeleteBatch", Permission: deletePerm},
 		{Method: "DELETE", Path: "/:id", Handler: "Delete", Permission: deletePerm},
 	}
 }

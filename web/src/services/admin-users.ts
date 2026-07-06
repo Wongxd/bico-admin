@@ -13,6 +13,7 @@ export interface AdminUser {
   name: string
   avatar: string
   enabled: boolean
+  is_super_admin?: boolean
   roles?: AdminUserRole[]
   created_at?: string
   updated_at?: string
@@ -24,6 +25,7 @@ interface AdminUserListParams {
   username?: string
   name?: string
   enabled?: boolean
+  role_ids?: string
   sortField?: string
   sortOrder?: string
 }
@@ -43,6 +45,7 @@ interface CreateAdminUserParams {
 }
 
 interface UpdateAdminUserParams {
+  username: string
   name: string
   avatar: string
   enabled: boolean
@@ -89,6 +92,17 @@ export async function updateAdminUser(id: number, data: UpdateAdminUserParams) {
 export async function deleteAdminUser(id: number) {
   const response = await api.delete<ApiResponse<null>>(
     buildApiUrl(`/admin-users/${id}`)
+  )
+  return response.data
+}
+
+/**
+ * 批量删除后台用户，DELETE 请求体必须放在 axios 的 data 字段中。
+ */
+export async function deleteAdminUsers(ids: number[]) {
+  const response = await api.delete<ApiResponse<null>>(
+    buildApiUrl('/admin-users/batch'),
+    { data: { ids } }
   )
   return response.data
 }

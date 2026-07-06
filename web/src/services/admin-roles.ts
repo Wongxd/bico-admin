@@ -102,6 +102,17 @@ export async function deleteAdminRole(id: number) {
 }
 
 /**
+ * 批量删除角色，DELETE 请求体必须放在 axios 的 data 字段中。
+ */
+export async function deleteAdminRoles(ids: number[]) {
+  const response = await api.delete<ApiResponse<null>>(
+    buildApiUrl('/admin-roles/batch'),
+    { data: { ids } }
+  )
+  return response.data
+}
+
+/**
  * 获取完整权限树，用于角色权限配置抽屉。
  */
 export async function getAllPermissions() {

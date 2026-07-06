@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getRouteApi } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { getRouteApi } from '@tanstack/react-router'
 import {
   type ColumnOrderState,
   type ColumnPinningState,
@@ -10,33 +10,41 @@ import {
   useReactTable,
   type ColumnDef,
 } from '@tanstack/react-table'
-import { getAdminUsers, deleteAdminUser, type AdminUser } from '@/services/admin-users'
-import { cn } from '@/lib/utils'
-import { useHasPermission } from '@/lib/permissions'
-import { useTableUrlState } from '@/hooks/use-table-url-state'
+import { getAllAdminRoles } from '@/services/admin-roles'
+import {
+  getAdminUsers,
+  deleteAdminUser,
+  deleteAdminUsers,
+  type AdminUser,
+} from '@/services/admin-users'
+import { Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useHasPermission } from '@/lib/permissions'
+import { cn } from '@/lib/utils'
 import useDialogState from '@/hooks/use-dialog-state'
-
-import { Main } from '@/components/layout/main'
-
-// 基础 UI 组件
-import { DataTable, DataTableToolbar, DataTableColumnHeader } from '@/components/data-table'
-import { Checkbox } from '@/components/ui/checkbox'
+import { useTableUrlState } from '@/hooks/use-table-url-state'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { ConfirmDialog } from '@/components/confirm-dialog'
-import { LongText } from '@/components/long-text'
-import { Pencil, Trash2 } from 'lucide-react'
+// 基础 UI 组件
+import {
+  DataTable,
+  DataTableBulkActions,
+  DataTableToolbar,
+  DataTableColumnHeader,
+} from '@/components/data-table'
 import { EnabledStatusBadge } from '@/components/enabled-status-badge'
+import { Main } from '@/components/layout/main'
+import { LongText } from '@/components/long-text'
 import { ManagementPageHeader } from '@/components/management-page-header'
-
 // 子抽屉
 import { AdminUsersActionDrawer } from './components/admin-users-action-drawer'
 
 const route = getRouteApi('/_authenticated/system/admin-users')
 
-type AdminUsersDialogType = 'add' | 'edit' | 'delete'
+type AdminUsersDialogType = 'add' | 'edit' | 'delete' | 'deleteBatch'
 
 const enabledFilterOptions = [
   { label: '启用', value: 'true' },
@@ -47,7 +55,16 @@ const columnFilterConfig = [
   { columnId: 'username', searchKey: 'username', type: 'string' as const },
   { columnId: 'name', searchKey: 'name', type: 'string' as const },
   { columnId: 'enabled', searchKey: 'enabled', type: 'array' as const },
+  { columnId: 'roles', searchKey: 'roleIds', type: 'array' as const },
 ]
+
+/**
+ * 判断用户是否为内置超级管理员。
+ * 后端通过 is_super_admin 标识兜底超级管理员，前端只负责同步禁用删除入口。
+ */
+function isSuperAdminUser(user: AdminUser) {
+  return !!user.is_super_admin
+}
 
 function getUserInitials(user: AdminUser) {
   const displayName = user.name || user.username
@@ -85,6 +102,22 @@ export function AdminUsers() {
   const canEdit = useHasPermission('system:admin_user:edit')
   const canDelete = useHasPermission('system:admin_user:delete')
 
+  // 角色筛选选项复用角色列表接口，只在用户管理页加载一次。
+  const rolesQuery = useQuery({
+    queryKey: ['admin-roles-all'],
+    queryFn: getAllAdminRoles,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const roleFilterOptions = useMemo(
+    () =>
+      (rolesQuery.data?.data ?? []).map((role) => ({
+        label: role.name,
+        value: String(role.id),
+      })),
+    [rolesQuery.data?.data]
+  )
+
   // URL 查询与表格同步 Hook
   const {
     columnFilters,
@@ -102,18 +135,30 @@ export function AdminUsers() {
 
   // 查询参数转换
   const queryParams = useMemo(() => {
-    const username = columnFilters.find((filter) => filter.id === 'username')?.value
+    const username = columnFilters.find(
+      (filter) => filter.id === 'username'
+    )?.value
     const name = columnFilters.find((filter) => filter.id === 'name')?.value
-    const enabledValues = columnFilters.find((filter) => filter.id === 'enabled')?.value
+    const enabledValues = columnFilters.find(
+      (filter) => filter.id === 'enabled'
+    )?.value
+    const roleValues = columnFilters.find(
+      (filter) => filter.id === 'roles'
+    )?.value
     const enabledList = Array.isArray(enabledValues) ? enabledValues : []
+    const roleIdList = Array.isArray(roleValues) ? roleValues : []
     const sort = sorting[0]
 
     return {
       page: pagination.pageIndex + 1,
       pageSize: pagination.pageSize,
-      username: typeof username === 'string' && username.trim() ? username.trim() : undefined,
+      username:
+        typeof username === 'string' && username.trim()
+          ? username.trim()
+          : undefined,
       name: typeof name === 'string' && name.trim() ? name.trim() : undefined,
       enabled: enabledList.length === 1 ? enabledList[0] === 'true' : undefined,
+      role_ids: roleIdList.length > 0 ? roleIdList.join(',') : undefined,
       sortField: sort ? sort.id : undefined,
       sortOrder: sort ? (sort.desc ? 'descend' : 'ascend') : undefined,
     }
@@ -140,6 +185,17 @@ export function AdminUsers() {
     },
   })
 
+  // 批量删除 Mutation
+  const deleteBatchMutation = useMutation({
+    mutationFn: (ids: number[]) => deleteAdminUsers(ids),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      setRowSelection({})
+      toast.success('用户已批量删除')
+      setOpen(null)
+    },
+  })
+
   // 列属性定义
   const columns = useMemo<ColumnDef<AdminUser>[]>(
     () => [
@@ -151,19 +207,22 @@ export function AdminUsers() {
               table.getIsAllPageRowsSelected() ||
               (table.getIsSomePageRowsSelected() && 'indeterminate')
             }
-            onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+            onCheckedChange={(value) =>
+              table.toggleAllPageRowsSelected(!!value)
+            }
             aria-label='选择全部用户'
             className='translate-y-0.5'
           />
         ),
         meta: {
           className: cn(
-            'inset-s-0 z-10 w-9 min-w-9 max-w-9 px-2 text-center rounded-tl-[inherit] max-md:sticky'
+            'inset-s-0 z-10 w-9 max-w-9 min-w-9 rounded-tl-[inherit] px-2 text-center max-md:sticky'
           ),
         },
         cell: ({ row }) => (
           <Checkbox
             checked={row.getIsSelected()}
+            disabled={!row.getCanSelect()}
             onCheckedChange={(value) => row.toggleSelected(!!value)}
             aria-label='选择当前用户'
             className='translate-y-0.5'
@@ -180,7 +239,9 @@ export function AdminUsers() {
           <DataTableColumnHeader column={column} title='用户名' />
         ),
         cell: ({ row }) => (
-          <LongText className='max-w-40 ps-3'>{row.getValue('username')}</LongText>
+          <LongText className='max-w-40 ps-3'>
+            {row.getValue('username')}
+          </LongText>
         ),
         meta: {
           label: '用户名',
@@ -201,7 +262,10 @@ export function AdminUsers() {
         },
         cell: ({ row }) => (
           <Avatar className='size-10'>
-            <AvatarImage src={row.original.avatar} alt={row.original.username} />
+            <AvatarImage
+              src={row.original.avatar}
+              alt={row.original.username}
+            />
             <AvatarFallback>{getUserInitials(row.original)}</AvatarFallback>
           </Avatar>
         ),
@@ -216,7 +280,9 @@ export function AdminUsers() {
           label: '姓名',
         },
         cell: ({ row }) => (
-          <LongText className='max-w-40'>{row.getValue('name') || '-'}</LongText>
+          <LongText className='max-w-40'>
+            {row.getValue('name') || '-'}
+          </LongText>
         ),
         enableSorting: false,
       },
@@ -278,7 +344,9 @@ export function AdminUsers() {
             return <span className='text-muted-foreground'>-</span>
           }
           return (
-            <span className='text-nowrap'>{new Date(value).toLocaleString()}</span>
+            <span className='text-nowrap'>
+              {new Date(value).toLocaleString()}
+            </span>
           )
         },
         enableSorting: true,
@@ -289,6 +357,7 @@ export function AdminUsers() {
           if (!canEdit && !canDelete) {
             return null
           }
+          const isProtected = isSuperAdminUser(row.original)
           return (
             <div className='flex justify-end gap-1 text-nowrap'>
               {canEdit && (
@@ -301,7 +370,7 @@ export function AdminUsers() {
                     setOpen('edit')
                   }}
                 >
-                  <Pencil className='size-4 mr-1' />
+                  <Pencil className='mr-1 size-4' />
                   编辑
                 </Button>
               )}
@@ -310,13 +379,19 @@ export function AdminUsers() {
                   type='button'
                   variant='ghost'
                   size='sm'
+                  disabled={isProtected}
+                  title={isProtected ? '内置超级管理员不能删除' : undefined}
                   className='text-destructive hover:text-destructive focus-visible:ring-destructive/20'
                   onClick={() => {
+                    // 内置超级管理员由后端兜底保护，这里同步拦截误点。
+                    if (isProtected) {
+                      return
+                    }
                     setCurrentRow(row.original)
                     setOpen('delete')
                   }}
                 >
-                  <Trash2 className='size-4 mr-1' />
+                  <Trash2 className='mr-1 size-4' />
                   删除
                 </Button>
               )}
@@ -346,7 +421,8 @@ export function AdminUsers() {
     manualFiltering: true,
     manualPagination: true,
     manualSorting: true,
-    enableRowSelection: true,
+    enableRowSelection: (row) => !isSuperAdminUser(row.original),
+    getRowId: (row) => String(row.id),
     onPaginationChange,
     onColumnFiltersChange,
     onRowSelectionChange: setRowSelection,
@@ -356,6 +432,10 @@ export function AdminUsers() {
     onColumnPinningChange: setColumnPinning,
     getCoreRowModel: getCoreRowModel(),
   })
+
+  const selectedUserIds = table
+    .getFilteredSelectedRowModel()
+    .rows.map((row) => row.original.id)
 
   useEffect(() => {
     ensurePageInRange(pageCount)
@@ -384,12 +464,19 @@ export function AdminUsers() {
             table={table}
             searchPlaceholder='筛选用户名...'
             searchKey='username'
+            onRefresh={() => void usersQuery.refetch()}
+            isRefreshing={usersQuery.isFetching}
             textFilters={[{ columnId: 'name', placeholder: '筛选姓名...' }]}
             filters={[
               {
                 columnId: 'enabled',
                 title: '状态',
                 options: enabledFilterOptions,
+              },
+              {
+                columnId: 'roles',
+                title: '角色',
+                options: roleFilterOptions,
               },
             ]}
           />
@@ -399,6 +486,20 @@ export function AdminUsers() {
             loadingMessage='正在加载用户...'
             emptyMessage='暂无用户数据'
           />
+          {canDelete && (
+            <DataTableBulkActions table={table} entityName='用户'>
+              <Button
+                type='button'
+                variant='destructive'
+                size='icon'
+                aria-label='批量删除用户'
+                title='批量删除用户'
+                onClick={() => setOpen('deleteBatch')}
+              >
+                <Trash2 className='size-4' />
+              </Button>
+            </DataTableBulkActions>
+          )}
         </div>
       </Main>
 
@@ -420,6 +521,20 @@ export function AdminUsers() {
         destructive
         isLoading={deleteMutation.isPending}
         handleConfirm={() => deleteMutation.mutate()}
+      />
+
+      {/* 批量删除确认弹窗 */}
+      <ConfirmDialog
+        open={open === 'deleteBatch'}
+        onOpenChange={(v) => !v && setOpen(null)}
+        title='确定批量删除用户？'
+        desc={`确定删除选中的 ${selectedUserIds.length} 个用户吗？此操作不可撤销。`}
+        cancelBtnText='取消'
+        confirmText='确定删除'
+        destructive
+        disabled={selectedUserIds.length === 0}
+        isLoading={deleteBatchMutation.isPending}
+        handleConfirm={() => deleteBatchMutation.mutate(selectedUserIds)}
       />
     </>
   )

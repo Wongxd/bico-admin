@@ -45,18 +45,20 @@ type LoginResponse struct {
 
 // UserInfo 用户信息
 type UserInfo struct {
-	ID          uint     `json:"id"`
-	Username    string   `json:"username"`
-	Name        string   `json:"name"`
-	Avatar      string   `json:"avatar"`
-	Enabled     bool     `json:"enabled"`
-	Permissions []string `json:"permissions"`
+	ID           uint     `json:"id"`
+	Username     string   `json:"username"`
+	Name         string   `json:"name"`
+	Avatar       string   `json:"avatar"`
+	Enabled      bool     `json:"enabled"`
+	IsSuperAdmin bool     `json:"is_super_admin"`
+	Permissions  []string `json:"permissions"`
 }
 
 // UpdateProfileRequest 更新用户资料请求
 type UpdateProfileRequest struct {
-	Name   string `json:"name"`
-	Avatar string `json:"avatar"`
+	Username string `json:"username"`
+	Name     string `json:"name"`
+	Avatar   string `json:"avatar"`
 }
 
 // ChangePasswordRequest 修改密码请求
@@ -81,6 +83,8 @@ type IAuthService interface {
 type AuthCacheInvalidator interface {
 	InvalidateUserPermissionCache(userID uint)
 	InvalidateRoleUsersPermissionCache(roleID uint)
+	// InvalidateRolesUsersPermissionCache 批量失效多个角色关联用户的权限缓存。
+	InvalidateRolesUsersPermissionCache(roleIDs []uint)
 	InvalidateUserStatusCache(userID uint)
 }
 
@@ -239,12 +243,13 @@ func (s *AuthService) GetUserByID(userID uint) (*UserInfo, error) {
 	s.setUserStatusCache(userID, user.Enabled)
 
 	return &UserInfo{
-		ID:          user.ID,
-		Username:    user.Username,
-		Name:        user.Name,
-		Avatar:      user.Avatar,
-		Enabled:     user.Enabled,
-		Permissions: permissions,
+		ID:           user.ID,
+		Username:     user.Username,
+		Name:         user.Name,
+		Avatar:       user.Avatar,
+		Enabled:      user.Enabled,
+		IsSuperAdmin: user.IsSuperAdmin,
+		Permissions:  permissions,
 	}, nil
 }
 
@@ -262,6 +267,17 @@ func (s *AuthService) UpdateProfile(userID uint, req *UpdateProfileRequest) (*Us
 	}
 
 	updates := make(map[string]interface{})
+	if req.Username != "" && req.Username != user.Username {
+		exists, err := crud.Exists(s.db, &model.AdminUser{}, "username = ? AND id != ?", req.Username, user.ID)
+		if err != nil {
+			return nil, err
+		}
+		// 用户名用于登录，必须全局唯一，避免登录时无法确定用户身份。
+		if exists {
+			return nil, errors.New("用户名已存在")
+		}
+		updates["username"] = req.Username
+	}
 	if req.Name != "" {
 		updates["name"] = req.Name
 	}
@@ -274,6 +290,10 @@ func (s *AuthService) UpdateProfile(userID uint, req *UpdateProfileRequest) (*Us
 		if err != nil {
 			return nil, err
 		}
+		// 更新后重新读取，确保返回值包含最新用户名、姓名和头像。
+		if err := s.db.Where("id = ?", userID).First(&user).Error; err != nil {
+			return nil, err
+		}
 	}
 
 	permissions, err := s.GetUserPermissions(userID)
@@ -283,12 +303,13 @@ func (s *AuthService) UpdateProfile(userID uint, req *UpdateProfileRequest) (*Us
 	}
 
 	return &UserInfo{
-		ID:          user.ID,
-		Username:    user.Username,
-		Name:        user.Name,
-		Avatar:      user.Avatar,
-		Enabled:     user.Enabled,
-		Permissions: permissions,
+		ID:           user.ID,
+		Username:     user.Username,
+		Name:         user.Name,
+		Avatar:       user.Avatar,
+		Enabled:      user.Enabled,
+		IsSuperAdmin: user.IsSuperAdmin,
+		Permissions:  permissions,
 	}, nil
 }
 
@@ -331,12 +352,12 @@ func (s *AuthService) GetUserPermissions(userID uint) ([]string, error) {
 
 	// 获取用户信息
 	var user model.AdminUser
-	if err := s.db.Select("username").First(&user, userID).Error; err != nil {
+	if err := s.db.Select("is_super_admin").First(&user, userID).Error; err != nil {
 		return nil, err
 	}
 
-	// 如果是默认管理员账户，返回所有权限
-	if user.Username == "admin" {
+	// 超级管理员返回所有权限，用户名可以修改，不能参与权限判断。
+	if user.IsSuperAdmin {
 		adminPerms := crud.GetAllPermissionKeys()
 		s.setPermissionsCache(userID, adminPerms)
 		return adminPerms, nil
@@ -385,9 +406,20 @@ func (s *AuthService) InvalidateUserPermissionCache(userID uint) {
 
 // InvalidateRoleUsersPermissionCache 失效指定角色下所有用户的权限缓存
 func (s *AuthService) InvalidateRoleUsersPermissionCache(roleID uint) {
+	s.InvalidateRolesUsersPermissionCache([]uint{roleID})
+}
+
+// InvalidateRolesUsersPermissionCache 失效多个角色下所有用户的权限缓存
+func (s *AuthService) InvalidateRolesUsersPermissionCache(roleIDs []uint) {
+	// 空角色列表没有缓存需要失效，直接返回避免无意义查询。
+	if len(roleIDs) == 0 {
+		return
+	}
+
+	uniqueRoleIDs := crud.UniqueUints(roleIDs)
 	var userIDs []uint
 	if err := s.db.Table("admin_user_roles").
-		Where("role_id = ?", roleID).
+		Where("role_id IN ?", uniqueRoleIDs).
 		Distinct("user_id").
 		Pluck("user_id", &userIDs).Error; err != nil {
 		return

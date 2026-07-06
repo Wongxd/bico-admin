@@ -1,5 +1,7 @@
 import { Cross2Icon } from '@radix-ui/react-icons'
 import { type Table } from '@tanstack/react-table'
+import { RefreshCw } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DataTableFacetedFilter } from './faceted-filter'
@@ -22,6 +24,8 @@ type DataTableToolbarProps<TData> = {
       icon?: React.ComponentType<{ className?: string }>
     }[]
   }[]
+  onRefresh?: () => void
+  isRefreshing?: boolean
 }
 
 /**
@@ -33,6 +37,8 @@ export function DataTableToolbar<TData>({
   searchKey,
   textFilters = [],
   filters = [],
+  onRefresh,
+  isRefreshing = false,
 }: DataTableToolbarProps<TData>) {
   const isFiltered =
     table.getState().columnFilters.length > 0 || table.getState().globalFilter
@@ -104,7 +110,25 @@ export function DataTableToolbar<TData>({
           </Button>
         )}
       </div>
-      <DataTableViewOptions table={table} />
+      <div className='flex items-center gap-2'>
+        {onRefresh && (
+          <Button
+            type='button'
+            variant='outline'
+            size='icon'
+            className='size-8'
+            disabled={isRefreshing}
+            aria-label='刷新列表'
+            title='刷新列表'
+            onClick={onRefresh}
+          >
+            <RefreshCw
+              className={cn('size-4', isRefreshing && 'animate-spin')}
+            />
+          </Button>
+        )}
+        <DataTableViewOptions table={table} />
+      </div>
     </div>
   )
 }

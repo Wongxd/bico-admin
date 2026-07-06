@@ -25,6 +25,7 @@ import {
 import { Input } from '@/components/ui/input'
 
 const profileFormSchema = z.object({
+  username: z.string().trim().min(1, '请输入用户名。'),
   name: z
     .string('请输入姓名。')
     .min(2, '姓名长度必须至少为 2 个字符。')
@@ -43,6 +44,7 @@ type ProfileFormProps = {
  */
 function buildProfileValues(user: CurrentUser | null): ProfileFormValues {
   return {
+    username: user?.username || '',
     name: user?.name || user?.username || '',
     avatar: user?.avatar || '',
   }
@@ -63,7 +65,7 @@ function getUserInitials(user: CurrentUser | null) {
 }
 
 /**
- * 个人信息表单，负责更新当前用户的头像和名称。
+ * 个人信息表单，负责更新当前用户的用户名、头像和名称。
  */
 export function ProfileForm({ onSaved }: ProfileFormProps) {
   const { auth } = useAuthStore()
@@ -94,13 +96,14 @@ export function ProfileForm({ onSaved }: ProfileFormProps) {
   }
 
   /**
-   * 保存头像和名称到后端。
+   * 保存用户名、头像和名称到后端。
    */
   async function onSubmit(data: ProfileFormValues) {
     setIsSaving(true)
 
     try {
       await updateProfile({
+        username: data.username.trim(),
         name: data.name.trim(),
         avatar: data.avatar.trim(),
       })
@@ -152,9 +155,9 @@ export function ProfileForm({ onSaved }: ProfileFormProps) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className='space-y-5'>
-        <div className='flex flex-col items-center sm:items-start gap-4'>
+        <div className='flex flex-col items-center gap-4 sm:items-start'>
           <div className='flex items-center gap-4'>
-            <label className='relative flex size-16 cursor-pointer items-center justify-center rounded-full border border-border bg-muted overflow-hidden group hover:border-primary/50 transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2'>
+            <label className='group relative flex size-16 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-border bg-muted transition-colors focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 hover:border-primary/50'>
               <Avatar className='size-full rounded-none'>
                 <AvatarImage src={avatarPreview} alt='当前用户头像' />
                 <AvatarFallback className='rounded-none text-base font-semibold'>
@@ -165,16 +168,16 @@ export function ProfileForm({ onSaved }: ProfileFormProps) {
               {/* 悬停时的遮罩和图标 */}
               <div
                 className={cn(
-                  'absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity',
-                  isUploading && 'opacity-100 bg-black/60 pointer-events-none'
+                  'absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100',
+                  isUploading && 'pointer-events-none bg-black/60 opacity-100'
                 )}
               >
                 {isUploading ? (
-                  <Loader2 className='animate-spin h-5 w-5' />
+                  <Loader2 className='h-5 w-5 animate-spin' />
                 ) : (
                   <>
-                    <Camera className='h-4 w-4 mb-0.5' />
-                    <span className='text-[10px] scale-90'>修改</span>
+                    <Camera className='mb-0.5 h-4 w-4' />
+                    <span className='scale-90 text-[10px]'>修改</span>
                   </>
                 )}
               </div>
@@ -190,12 +193,26 @@ export function ProfileForm({ onSaved }: ProfileFormProps) {
             </label>
             <div>
               <p className='text-sm font-medium'>头像</p>
-              <p className='text-xs text-muted-foreground mt-0.5'>
+              <p className='mt-0.5 text-xs text-muted-foreground'>
                 点击头像可以重新上传图片
               </p>
             </div>
           </div>
         </div>
+
+        <FormField
+          control={form.control}
+          name='username'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>用户名</FormLabel>
+              <FormControl>
+                <Input placeholder='请输入用户名' {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
         <FormField
           control={form.control}

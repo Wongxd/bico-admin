@@ -29,11 +29,13 @@ export interface CurrentUser {
   name: string
   avatar: string
   enabled?: boolean
+  is_super_admin?: boolean
   roles?: string[]
   permissions?: string[]
 }
 
 interface UpdateProfileParams {
+  username: string
   name: string
   avatar: string
 }
