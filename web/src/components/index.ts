@@ -15,7 +15,6 @@ export { default as OfflineBanner } from './OfflineBanner';
 export { default as CrudModal } from './CrudModal';
 export { default as CrudTable } from './CrudTable';
 export { default as ExcelImportExportActions } from './ExcelImportExportActions';
-export { default as RichEditor } from './RichEditor';
 export { default as PageContainer } from './PageContainer';
 export { default as AvatarUpload } from './AvatarUpload';
 

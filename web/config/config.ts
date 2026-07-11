@@ -62,6 +62,12 @@ export default defineConfig({
   // umi routes: https://umijs.org/docs/routing
   routes,
   /**
+   * 代码分割策略，将第三方大依赖拆分为独立的 chunk，减少首屏文件体积。
+   */
+  codeSplitting: {
+    jsStrategy: 'granularChunks',
+  },
+  /**
    * @name 主题的配置
    * @description 虽然叫主题，但是其实只是 less 的变量设置
    * @doc antd的主题设置 https://ant.design/docs/react/customize-theme-cn

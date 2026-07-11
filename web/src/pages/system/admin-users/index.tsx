@@ -6,7 +6,7 @@ import { ProFormText, ProFormSwitch, ProFormSelect } from '@ant-design/pro-compo
 import { Avatar, Tag, Space, Form } from 'antd';
 import React, { useCallback, useState, useEffect } from 'react';
 import AvatarUpload from '@/components/AvatarUpload';
-import { CrudTable } from '@/components';
+import CrudTable from '@/components/CrudTable';
 import { createCrudService } from '@/services/crud';
 import { getAllAdminRoles } from '@/services/system/admin-role';
 import { uploadAvatar } from '@/services/auth/profile';

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Tabs } from 'antd';
 
-import { PageContainer } from '@/components';
+import PageContainer from '@/components/PageContainer';
 
 type DocType = 'admin' | 'api';
 

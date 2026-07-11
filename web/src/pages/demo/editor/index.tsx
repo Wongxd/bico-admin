@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, Typography } from 'antd';
 
-import { PageContainer } from '@/components';
+import PageContainer from '@/components/PageContainer';
 import RichEditor from '@/components/RichEditor';
 
 /**

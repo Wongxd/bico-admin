@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { Button, Card, Descriptions, Table, Typography, message } from 'antd';
 
-import { PageContainer } from '@/components';
-import { ExcelImportExportActions } from '@/components';
+import PageContainer from '@/components/PageContainer';
+import ExcelImportExportActions from '@/components/ExcelImportExportActions';
 import { downloadBlob, getFilenameFromContentDisposition } from '@/utils/download';
 import {
   downloadDemoExcelTemplate,

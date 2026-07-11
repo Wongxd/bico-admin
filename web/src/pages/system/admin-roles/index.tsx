@@ -7,7 +7,7 @@ import { Tag, Space, Drawer, Tree, Button, message, Tooltip } from 'antd';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { ActionType } from '@ant-design/pro-components';
 import { useAccess } from '@umijs/max';
-import { CrudTable } from '@/components';
+import CrudTable from '@/components/CrudTable';
 import { createCrudService } from '@/services/crud';
 import { getAllPermissions, updateRolePermissions } from '@/services/system/admin-role';
 import type { Permission } from '@/services/system/admin-role/types';

@@ -168,8 +168,8 @@ const Login: React.FC = () => {
             });
             message.success(defaultLoginSuccessMessage);
             
-            // 跳转到重定向页面或首页
-            window.location.href = getRedirectPath();
+            // 使用 Umi history.replace 进行软路由跳转，避免整页重载导致空白和二次加载静态资源
+            history.replace(getRedirectPath());
         } catch (error: any) {
             // 响应拦截器已将后端错误信息放到 error.message 中
             setUserLoginState({ 

@@ -108,21 +108,43 @@ export async function getInitialState(): Promise<{
         }
     };
 
-    // 获取应用配置
+    // 获取当前页面路径，用于判断初始化时是否需要拉取用户信息
+    const { pathname } = window.location;
     let appConfig: API.AppConfig | undefined;
+    let currentUser: API.CurrentUser | undefined;
+
     try {
-        const configResponse = await getAppConfig();
-        if (configResponse.code === 0 && configResponse.data) {
-            appConfig = configResponse.data;
+        if (pathname !== loginPath) {
+            // 在非登录页面，并行获取应用配置和用户信息，大幅减少串行请求带来的首屏白屏时间
+            const [configResponse, userInfo] = await Promise.all([
+                getAppConfig().catch((e) => {
+                    console.error("获取应用配置失败:", e);
+                    return null;
+                }),
+                fetchUserInfo(),
+            ]);
+
+            // 接口成功返回时解析并填充应用配置
+            if (configResponse && configResponse.code === 0 && configResponse.data) {
+                appConfig = configResponse.data;
+            }
+            currentUser = userInfo;
+        } else {
+            // 处于登录页面时，仅需要获取应用全局配置，无需调用用户信息接口
+            const configResponse = await getAppConfig().catch((e) => {
+                console.error("获取应用配置失败:", e);
+                return null;
+            });
+            if (configResponse && configResponse.code === 0 && configResponse.data) {
+                appConfig = configResponse.data;
+            }
         }
     } catch (e) {
-        console.error("获取应用配置失败:", e);
+        console.error("系统初始化数据失败:", e);
     }
 
-    // 如果不是登录页面，执行
-    const { pathname } = window.location;
+    // 根据路由分发不同的初始全局状态
     if (pathname !== loginPath) {
-        const currentUser = await fetchUserInfo();
         return {
             fetchUserInfo,
             currentUser,

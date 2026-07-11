@@ -4,7 +4,7 @@ import { ProTable } from '@ant-design/pro-components';
 import { Button, message, Popconfirm, Space, Tooltip } from 'antd';
 import React, { useRef, useState, useMemo, useCallback, useEffect } from 'react';
 import { useAccess } from '@umijs/max';
-import { PageContainer } from '@/components';
+import PageContainer from '../PageContainer';
 import { transformTableParams, transformTableResponse } from '@/utils/table';
 import type { TablePaginationConfig } from 'antd';
 import CrudModal from '../CrudModal';
