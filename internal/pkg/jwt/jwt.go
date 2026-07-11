@@ -14,6 +14,7 @@ var (
 type Claims struct {
 	UserID   uint   `json:"user_id"`
 	Username string `json:"username"`
+	Version  uint   `json:"version"`
 	Exp      int64  `json:"exp"`
 }
 
@@ -37,13 +38,14 @@ func NewJWTManager(secret string, expireHours int) *JWTManager {
 }
 
 // GenerateToken 生成 token
-func (j *JWTManager) GenerateToken(userID uint, username string) (string, error) {
+func (j *JWTManager) GenerateToken(userID uint, username string, version uint) (string, error) {
 	claims := &Claims{
 		UserID:   userID,
 		Username: username,
+		Version:  version,
 		Exp:      time.Now().Add(time.Duration(j.expireHours) * time.Hour).Unix(),
 	}
-	
+
 	token := createToken(claims, j.secret)
 	return token, nil
 }
@@ -54,11 +56,11 @@ func (j *JWTManager) ParseToken(tokenString string) (*Claims, error) {
 	if err != nil {
 		return nil, ErrTokenInvalid
 	}
-	
+
 	if time.Now().Unix() > claims.Exp {
 		return nil, ErrTokenExpired
 	}
-	
+
 	return claims, nil
 }
 
@@ -68,10 +70,11 @@ func (j *JWTManager) ValidateToken(tokenString string) (map[string]interface{}, 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return map[string]interface{}{
 		"user_id":  float64(claims.UserID),
 		"username": claims.Username,
+		"version":  float64(claims.Version),
 		"exp":      float64(claims.Exp),
 	}, nil
 }

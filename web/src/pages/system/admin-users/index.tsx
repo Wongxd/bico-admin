@@ -3,13 +3,14 @@
  */
 import type { ProColumns } from '@ant-design/pro-components';
 import { ProFormText, ProFormSwitch, ProFormSelect } from '@ant-design/pro-components';
-import { Avatar, Tag, Space, Upload, Button, message, Form } from 'antd';
-import { UploadOutlined } from '@ant-design/icons';
-import React, { useState, useEffect } from 'react';
+import { Avatar, Tag, Space, Form } from 'antd';
+import React, { useCallback, useState, useEffect } from 'react';
+import AvatarUpload from '@/components/AvatarUpload';
 import { CrudTable } from '@/components';
 import { createCrudService } from '@/services/crud';
 import { getAllAdminRoles } from '@/services/system/admin-role';
-import { buildApiUrl } from '@/services/config';
+import { uploadAvatar } from '@/services/auth/profile';
+import { MIN_PASSWORD_LENGTH } from '@/utils/validation';
 
 // 类型定义
 interface AdminUser {
@@ -34,7 +35,7 @@ const columns: ProColumns<AdminUser>[] = [
     dataIndex: 'avatar',
     width: 80,
     search: false,
-    render: (_, r) => <Avatar src={r.avatar} size={40} />,
+    render: (_, r) => <Avatar src={r.avatar} alt={`${r.name || r.username}的头像`} size={40} />,
   },
   { title: '姓名', dataIndex: 'name', width: 150 },
   {
@@ -62,46 +63,60 @@ const FormContent: React.FC<{ record?: AdminUser }> = ({ record }) => {
   const form = Form.useFormInstance();
 
   useEffect(() => {
-    setAvatarUrl(record?.avatar || `https://api.dicebear.com/9.x/thumbs/png?seed=${Math.random()}`);
-  }, [record]);
+    const initialAvatar = record?.avatar || `https://api.dicebear.com/9.x/thumbs/png?seed=${Math.random()}`;
+    setAvatarUrl(initialAvatar);
+    form.setFieldValue('avatar', initialAvatar);
+  }, [form, record]);
+
+  // handleAvatarUpload 上传头像并返回组件需要的新地址。
+  const handleAvatarUpload = useCallback(async (file: File) => {
+    const response = await uploadAvatar(file);
+    if (response.code !== 0 || !response.data?.url) {
+      // 接口未返回有效地址时阻止表单写入。
+      throw new Error(response.msg || '头像上传失败');
+    }
+    return response.data.url;
+  }, []);
+
+  // handleAvatarChange 同步头像预览和隐藏表单字段。
+  const handleAvatarChange = useCallback((url: string) => {
+    setAvatarUrl(url);
+    form.setFieldValue('avatar', url);
+  }, [form]);
 
   return (
     <>
+      <ProFormText
+        name="username"
+        label="用户名"
+        placeholder="请输入用户名"
+        rules={[
+          { required: true, message: '请输入用户名' },
+          { whitespace: true, message: '用户名不能全为空格' },
+          { max: 64, message: '用户名不能超过64位' },
+        ]}
+      />
       {!isEdit && (
-        <>
-          <ProFormText name="username" label="用户名" placeholder="请输入用户名" rules={[{ required: true }]} />
-          <ProFormText.Password name="password" label="密码" placeholder="请输入密码" rules={[{ required: true }]} />
-        </>
+        <ProFormText.Password
+          name="password"
+          label="密码"
+          placeholder="请输入密码"
+          rules={[
+            { required: true },
+            { min: MIN_PASSWORD_LENGTH, message: `密码长度至少${MIN_PASSWORD_LENGTH}位` },
+          ]}
+        />
       )}
       <ProFormText name="name" label="姓名" placeholder="请输入姓名" />
       <ProFormText name="avatar" hidden />
-      <Space direction="vertical" size={8} style={{ marginBottom: 24 }}>
-        <div style={{ fontWeight: 500 }}>头像</div>
-        <Space size={16}>
-          <Avatar src={avatarUrl} size={64} />
-          <Upload
-            name="avatar"
-            showUploadList={false}
-            action={buildApiUrl('/auth/avatar')}
-            headers={{ Authorization: `Bearer ${localStorage.getItem('token')}` }}
-            onChange={(info) => {
-              if (info.file.status === 'done') {
-                const url = info.file.response?.data?.url;
-                if (url) {
-                  setAvatarUrl(url);
-                  // 头像上传成功后，同步写入表单字段，确保提交时能更新
-                  form?.setFieldValue('avatar', url);
-                  message.success('上传成功');
-                }
-              } else if (info.file.status === 'error') {
-                message.error('上传失败');
-              }
-            }}
-          >
-            <Button icon={<UploadOutlined />}>上传头像</Button>
-          </Upload>
-        </Space>
-      </Space>
+      <div style={{ marginBottom: 24 }}>
+        <AvatarUpload
+          value={avatarUrl}
+          label="头像"
+          onUpload={handleAvatarUpload}
+          onChange={handleAvatarChange}
+        />
+      </div>
       <ProFormSelect
         name="roleIds"
         label="角色"
@@ -112,7 +127,14 @@ const FormContent: React.FC<{ record?: AdminUser }> = ({ record }) => {
         }}
       />
       <ProFormSwitch name="enabled" label="状态" initialValue={true} />
-      {isEdit && <ProFormText.Password name="password" label="新密码" placeholder="不修改请留空" />}
+      {isEdit && (
+        <ProFormText.Password
+          name="password"
+          label="新密码"
+          placeholder="不修改请留空"
+          rules={[{ min: MIN_PASSWORD_LENGTH, message: `密码长度至少${MIN_PASSWORD_LENGTH}位` }]}
+        />
+      )}
     </>
   );
 };
@@ -126,6 +148,7 @@ export default function AdminUserList() {
       columns={columns}
       formContent={<FormContent />}
       recordToValues={(r) => ({
+        username: r.username,
         name: r.name,
         enabled: r.enabled,
         roleIds: r.roles?.map((role) => role.id),

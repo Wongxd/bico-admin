@@ -9,7 +9,10 @@ import (
 )
 
 // JWTAuth JWT认证中间件
-func JWTAuth(jwtManager *jwt.JWTManager, authService interface{ IsTokenBlacklisted(token string) bool }) gin.HandlerFunc {
+func JWTAuth(jwtManager *jwt.JWTManager, authService interface {
+	IsTokenBlacklisted(token string) bool
+	IsTokenVersionValid(userID uint, version uint) bool
+}) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// 获取 Authorization header
 		authHeader := c.GetHeader("Authorization")
@@ -29,13 +32,6 @@ func JWTAuth(jwtManager *jwt.JWTManager, authService interface{ IsTokenBlacklist
 
 		token := parts[1]
 
-		// 检查 token 是否在黑名单中
-		if authService.IsTokenBlacklisted(token) {
-			response.ErrorWithCode(c, 401, "token 已失效")
-			c.Abort()
-			return
-		}
-
 		// 验证 token
 		claims, err := jwtManager.ParseToken(token)
 
@@ -46,6 +42,12 @@ func JWTAuth(jwtManager *jwt.JWTManager, authService interface{ IsTokenBlacklist
 		}
 		if claims == nil || claims.UserID == 0 || claims.Username == "" {
 			response.ErrorWithCode(c, 401, "token 无效")
+			c.Abort()
+			return
+		}
+		if authService.IsTokenBlacklisted(token) || !authService.IsTokenVersionValid(claims.UserID, claims.Version) {
+			// 黑名单和用户令牌版本共同控制主动失效。
+			response.ErrorWithCode(c, 401, "token 已失效")
 			c.Abort()
 			return
 		}

@@ -1,13 +1,15 @@
 # 阶段 1: 前端构建
-FROM oven/bun:1-alpine AS web-builder
+FROM node:22-alpine AS web-builder
 
 WORKDIR /app/web
 
-COPY web/package.json web/bun.lock ./
-RUN bun install --frozen-lockfile --registry=https://registry.npmmirror.com
+RUN corepack enable
+
+COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile --registry=https://registry.npmmirror.com
 
 COPY web/ ./
-RUN bun run build
+RUN pnpm run build
 
 
 # 阶段 2: 后端构建
@@ -42,6 +44,7 @@ RUN apk add --no-cache ca-certificates tzdata && \
     echo "Asia/Shanghai" > /etc/timezone
 
 COPY --from=go-builder /app/bin/bico-admin .
+COPY config/config.prod.yaml ./config.yaml
 
 EXPOSE 8080
 

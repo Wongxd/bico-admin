@@ -100,8 +100,6 @@ definitions:
         type: object
     handler.adminRoleDocItem:
         properties:
-            code:
-                type: string
             description:
                 type: string
             enabled:
@@ -114,6 +112,8 @@ definitions:
                 items:
                     type: string
                 type: array
+            system:
+                type: boolean
         type: object
     handler.appConfigDocResponse:
         properties:
@@ -133,8 +133,6 @@ definitions:
         type: object
     handler.createRoleReq:
         properties:
-            code:
-                type: string
             description:
                 type: string
             enabled:
@@ -147,7 +145,6 @@ definitions:
                 type: array
         required:
             - name
-            - code
         type: object
     handler.createUserReq:
         properties:
@@ -232,8 +229,6 @@ definitions:
         type: object
     handler.roleListReq:
         properties:
-            code:
-                type: string
             description:
                 type: string
             enabled:
@@ -296,8 +291,6 @@ definitions:
         type: object
     model.AdminRole:
         properties:
-            code:
-                type: string
             created_at:
                 format: date-time
                 type: string
@@ -314,6 +307,8 @@ definitions:
                 items:
                     type: string
                 type: array
+            system:
+                type: boolean
             updated_at:
                 format: date-time
                 type: string
@@ -335,8 +330,6 @@ definitions:
             roles:
                 items:
                     properties:
-                        code:
-                            type: string
                         created_at:
                             format: date-time
                             type: string
@@ -353,6 +346,8 @@ definitions:
                             items:
                                 type: string
                             type: array
+                        system:
+                            type: boolean
                         updated_at:
                             format: date-time
                             type: string
@@ -367,6 +362,7 @@ definitions:
     service.ChangePasswordRequest:
         properties:
             newPassword:
+                minLength: 8
                 type: string
             oldPassword:
                 type: string
@@ -447,11 +443,6 @@ paths:
                 - description: Name
                   in: query
                   name: name
-                  required: false
-                  type: string
-                - description: Code
-                  in: query
-                  name: code
                   required: false
                   type: string
                 - description: Description

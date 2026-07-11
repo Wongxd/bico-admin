@@ -6,6 +6,7 @@ import (
 	"bico-admin/internal/pkg/crud"
 	"bico-admin/internal/pkg/password"
 	"errors"
+	"strings"
 
 	"gorm.io/gorm"
 )
@@ -43,12 +44,18 @@ func NewAdminUserHandler(db *gorm.DB, cacheInvalidator service.AuthCacheInvalida
 	}
 
 	h.NewModelFromCreate = func(req *createUserReq) (*model.AdminUser, error) {
-		exists, err := crud.Exists(db, &model.AdminUser{}, "username = ?", req.Username)
+		username := strings.TrimSpace(req.Username)
+		if username == "" {
+			// 去除首尾空格后为空的用户名不能用于登录。
+			return nil, service.ErrUsernameRequired
+		}
+		exists, err := crud.Exists(db, &model.AdminUser{}, "username = ?", username)
 		if err != nil {
 			return nil, err
 		}
 		if exists {
-			return nil, errors.New("用户名已存在")
+			// 用户名是全局唯一的登录标识。
+			return nil, service.ErrUsernameExists
 		}
 
 		hashed, err := password.Hash(req.Password)
@@ -57,7 +64,7 @@ func NewAdminUserHandler(db *gorm.DB, cacheInvalidator service.AuthCacheInvalida
 		}
 
 		return &model.AdminUser{
-			Username: req.Username,
+			Username: username,
 			Password: hashed,
 			Name:     req.Name,
 			Avatar:   req.Avatar,
@@ -77,7 +84,33 @@ func NewAdminUserHandler(db *gorm.DB, cacheInvalidator service.AuthCacheInvalida
 		return tx.Model(&model.AdminUser{})
 	}
 	h.BuildUpdates = func(req *updateUserReq, existing *model.AdminUser) (map[string]interface{}, error) {
+		if req.Enabled != nil && !*req.Enabled {
+			// 至少保留一个启用的超级管理员，避免后台永久失去管理入口。
+			if err := h.ensureSuperAdminRemains(db, existing.ID); err != nil {
+				return nil, err
+			}
+		}
 		updates := map[string]interface{}{}
+		if req.Username != nil {
+			username := strings.TrimSpace(*req.Username)
+			if username == "" {
+				// 显式提交空用户名时拒绝保存。
+				return nil, service.ErrUsernameRequired
+			}
+			if username != existing.Username {
+				// 查重时排除当前用户，允许保存未变更的用户名。
+				exists, err := crud.Exists(db, &model.AdminUser{}, "username = ? AND id <> ?", username, existing.ID)
+				if err != nil {
+					// 查重失败时不执行后续更新。
+					return nil, err
+				}
+				if exists {
+					// 重复用户名会导致登录身份不唯一。
+					return nil, service.ErrUsernameExists
+				}
+				updates["username"] = username
+			}
+		}
 		if req.Name != "" {
 			updates["name"] = req.Name
 		}
@@ -90,6 +123,7 @@ func NewAdminUserHandler(db *gorm.DB, cacheInvalidator service.AuthCacheInvalida
 				return nil, err
 			}
 			updates["password"] = hashed
+			updates["token_version"] = gorm.Expr("token_version + 1")
 		}
 		if req.Enabled != nil {
 			updates["enabled"] = *req.Enabled
@@ -116,6 +150,12 @@ func NewAdminUserHandler(db *gorm.DB, cacheInvalidator service.AuthCacheInvalida
 		}
 		return nil
 	}
+	h.AfterUpdateCommit = func(id uint, existing *model.AdminUser, req *updateUserReq) {
+		if req.Password != "" && h.cacheInvalidator != nil {
+			// 提交后清缓存，防止并发请求在提交前回填旧令牌版本。
+			h.cacheInvalidator.InvalidateUserTokenVersionCache(existing.ID)
+		}
+	}
 	h.ReloadAfterUpdate = func(tx *gorm.DB, id uint, existing *model.AdminUser) error {
 		return tx.Preload("Roles").First(existing, id).Error
 	}
@@ -123,6 +163,9 @@ func NewAdminUserHandler(db *gorm.DB, cacheInvalidator service.AuthCacheInvalida
 	h.DeleteInTx = func(tx *gorm.DB, id uint) error {
 		var user model.AdminUser
 		if err := tx.First(&user, id).Error; err != nil {
+			return err
+		}
+		if err := h.ensureSuperAdminRemains(tx, user.ID); err != nil {
 			return err
 		}
 		// 删除用户前先清空角色关联，任一步失败都回滚。
@@ -164,23 +207,27 @@ type (
 		Enabled  *bool  `form:"enabled"`
 	}
 	createUserReq struct {
-		Username string `json:"username" binding:"required"`
-		Password string `json:"password" binding:"required"`
+		Username string `json:"username" binding:"required,max=64"`
+		Password string `json:"password" binding:"required,min=8"`
 		Name     string `json:"name"`
 		Avatar   string `json:"avatar"`
 		Enabled  *bool  `json:"enabled"`
 		RoleIDs  []uint `json:"role_ids"`
 	}
 	updateUserReq struct {
-		Name     string `json:"name"`
-		Avatar   string `json:"avatar"`
-		Enabled  *bool  `json:"enabled"`
-		RoleIDs  []uint `json:"role_ids"`
-		Password string `json:"password"`
+		Username *string `json:"username" binding:"omitempty,max=64"`
+		Name     string  `json:"name"`
+		Avatar   string  `json:"avatar"`
+		Enabled  *bool   `json:"enabled"`
+		RoleIDs  []uint  `json:"role_ids"`
+		Password string  `json:"password" binding:"omitempty,min=8"`
 	}
 )
 
 func (h *AdminUserHandler) syncRoles(tx *gorm.DB, user *model.AdminUser, roleIDs []uint) error {
+	if err := h.ensureRoleChangeKeepsSuperAdmin(tx, user.ID, roleIDs); err != nil {
+		return err
+	}
 	// 先清空旧关联，确保写入结果与请求保持一致。
 	if err := tx.Model(user).Association("Roles").Clear(); err != nil {
 		return err
@@ -200,6 +247,63 @@ func (h *AdminUserHandler) syncRoles(tx *gorm.DB, user *model.AdminUser, roleIDs
 	}
 	if err := tx.Model(user).Association("Roles").Append(roles); err != nil {
 		return err
+	}
+	return nil
+}
+
+// ensureRoleChangeKeepsSuperAdmin 校验角色调整不会移除最后一个超级管理员。
+func (h *AdminUserHandler) ensureRoleChangeKeepsSuperAdmin(db *gorm.DB, userID uint, roleIDs []uint) error {
+	var currentSuperCount int64
+	if err := db.Table("admin_user_roles").
+		Joins("JOIN admin_roles ON admin_user_roles.role_id = admin_roles.id").
+		Where("admin_user_roles.user_id = ? AND admin_roles.code = ?", userID, model.SuperAdminRoleCode).
+		Count(&currentSuperCount).Error; err != nil {
+		return err
+	}
+	if currentSuperCount == 0 {
+		// 普通用户的角色调整不影响超级管理员连续性。
+		return nil
+	}
+
+	var requestedSuperCount int64
+	if len(roleIDs) > 0 {
+		if err := db.Model(&model.AdminRole{}).
+			Where("id IN ? AND code = ?", crud.UniqueUints(roleIDs), model.SuperAdminRoleCode).
+			Count(&requestedSuperCount).Error; err != nil {
+			return err
+		}
+	}
+	if requestedSuperCount > 0 {
+		// 请求仍保留超级管理员角色，无需额外校验。
+		return nil
+	}
+	return h.ensureSuperAdminRemains(db, userID)
+}
+
+// ensureSuperAdminRemains 确保目标用户之外仍有启用的超级管理员。
+func (h *AdminUserHandler) ensureSuperAdminRemains(db *gorm.DB, userID uint) error {
+	var targetSuperCount int64
+	if err := db.Table("admin_user_roles").
+		Joins("JOIN admin_roles ON admin_user_roles.role_id = admin_roles.id").
+		Where("admin_user_roles.user_id = ? AND admin_roles.code = ?", userID, model.SuperAdminRoleCode).
+		Count(&targetSuperCount).Error; err != nil {
+		return err
+	}
+	if targetSuperCount == 0 {
+		// 目标不是超级管理员时可直接变更。
+		return nil
+	}
+
+	var remaining int64
+	if err := db.Table("admin_user_roles").
+		Joins("JOIN admin_roles ON admin_user_roles.role_id = admin_roles.id").
+		Joins("JOIN admin_users ON admin_user_roles.user_id = admin_users.id").
+		Where("admin_roles.code = ? AND admin_roles.enabled = ? AND admin_users.enabled = ? AND admin_users.id != ?", model.SuperAdminRoleCode, true, true, userID).
+		Count(&remaining).Error; err != nil {
+		return err
+	}
+	if remaining == 0 {
+		return errors.New("必须保留至少一个启用的超级管理员")
 	}
 	return nil
 }

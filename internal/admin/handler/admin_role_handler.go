@@ -4,6 +4,8 @@ import (
 	"bico-admin/internal/admin/model"
 	"bico-admin/internal/admin/service"
 	"bico-admin/internal/pkg/crud"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -33,9 +35,6 @@ func NewAdminRoleHandler(db *gorm.DB, cacheInvalidator service.AuthCacheInvalida
 		if req.Name != "" {
 			query = query.Where("name LIKE ?", "%"+req.Name+"%")
 		}
-		if req.Code != "" {
-			query = query.Where("code LIKE ?", "%"+req.Code+"%")
-		}
 		if req.Description != "" {
 			query = query.Where("description LIKE ?", "%"+req.Description+"%")
 		}
@@ -56,6 +55,7 @@ func NewAdminRoleHandler(db *gorm.DB, cacheInvalidator service.AuthCacheInvalida
 		}
 		for i := range items {
 			items[i].Permissions = permsMap[items[i].ID]
+			items[i].System = items[i].Code == model.SuperAdminRoleCode
 		}
 		return nil
 	}
@@ -66,28 +66,26 @@ func NewAdminRoleHandler(db *gorm.DB, cacheInvalidator service.AuthCacheInvalida
 			return err
 		}
 		item.Permissions = perms
+		item.System = item.Code == model.SuperAdminRoleCode
 		return nil
 	}
 
 	h.NewModelFromCreate = func(req *createRoleReq) (*model.AdminRole, error) {
-		exists, err := crud.Exists(db, &model.AdminRole{}, "code = ?", req.Code)
-		if err != nil {
-			return nil, err
-		}
-		if exists {
-			return nil, errors.New("角色代码已存在")
-		}
-
-		exists, err = crud.Exists(db, &model.AdminRole{}, "name = ?", req.Name)
+		exists, err := crud.Exists(db, &model.AdminRole{}, "name = ?", req.Name)
 		if err != nil {
 			return nil, err
 		}
 		if exists {
 			return nil, errors.New("角色名称已存在")
 		}
+		code, err := generateRoleCode()
+		if err != nil {
+			// 内部标识生成失败时禁止创建不完整角色。
+			return nil, err
+		}
 		return &model.AdminRole{
 			Name:        req.Name,
-			Code:        req.Code,
+			Code:        code,
 			Description: req.Description,
 			Enabled:     req.Enabled == nil || *req.Enabled,
 			Permissions: req.Permissions,
@@ -100,6 +98,10 @@ func NewAdminRoleHandler(db *gorm.DB, cacheInvalidator service.AuthCacheInvalida
 	}
 
 	h.BuildUpdates = func(req *updateRoleReq, existing *model.AdminRole) (map[string]interface{}, error) {
+		if existing.Code == model.SuperAdminRoleCode {
+			// 超级管理员角色必须保持启用且不可改名。
+			return nil, errors.New("超级管理员角色不可修改")
+		}
 		// 这里校验名称唯一性：只有在传入 name 且发生变更时才检查
 		if req.Name != "" && req.Name != existing.Name {
 			exists, err := crud.Exists(db, &model.AdminRole{}, "name = ? AND id != ?", req.Name, existing.ID)
@@ -142,6 +144,14 @@ func NewAdminRoleHandler(db *gorm.DB, cacheInvalidator service.AuthCacheInvalida
 	}
 
 	h.DeleteInTx = func(tx *gorm.DB, id uint) error {
+		var role model.AdminRole
+		if err := tx.Select("code").First(&role, id).Error; err != nil {
+			return err
+		}
+		if role.Code == model.SuperAdminRoleCode {
+			// 删除保留角色会导致系统失去最高权限入口。
+			return errors.New("超级管理员角色不可删除")
+		}
 		// 删除角色前先失效该角色下用户权限缓存，避免删除后无法定位用户集合。
 		if h.cacheInvalidator != nil {
 			h.cacheInvalidator.InvalidateRoleUsersPermissionCache(id)
@@ -186,13 +196,11 @@ func (h *AdminRoleHandler) ModuleConfig() crud.ModuleConfig {
 type (
 	roleListReq struct {
 		Name        string `form:"name"`
-		Code        string `form:"code"`
 		Description string `form:"description"`
 		Enabled     *bool  `form:"enabled"`
 	}
 	createRoleReq struct {
 		Name        string   `json:"name" binding:"required"`
-		Code        string   `json:"code" binding:"required"`
 		Description string   `json:"description"`
 		Enabled     *bool    `json:"enabled"`
 		Permissions []string `json:"permissions"`
@@ -262,6 +270,11 @@ func (h *AdminRoleHandler) UpdatePermissions(c *gin.Context) {
 	if !h.QueryOne(c, h.DB.Where("id = ?", id), &role, "角色不存在") {
 		return
 	}
+	if role.Code == model.SuperAdminRoleCode {
+		// 保留角色动态拥有全部权限，无需持久化权限明细。
+		h.Error(c, "超级管理员角色权限不可修改")
+		return
+	}
 
 	h.ExecTx(c, h.DB, func(tx *gorm.DB) error {
 		// 先清空旧权限，再写入新权限，任一步失败都回滚。
@@ -301,7 +314,21 @@ func (h *AdminRoleHandler) GetAll(c *gin.Context) {
 		h.Error(c, err.Error())
 		return
 	}
+	for i := range roles {
+		roles[i].System = roles[i].Code == model.SuperAdminRoleCode
+	}
 	h.Success(c, roles)
+}
+
+// generateRoleCode 生成仅供系统内部使用的角色标识。
+// 随机标识不依赖角色名称，避免重命名影响既有关系。
+func generateRoleCode() (string, error) {
+	random := make([]byte, 8)
+	if _, err := rand.Read(random); err != nil {
+		// 安全随机源不可用时返回错误，避免产生可预测或重复标识。
+		return "", fmt.Errorf("生成角色标识失败: %w", err)
+	}
+	return "role_" + hex.EncodeToString(random), nil
 }
 
 // 私有方法

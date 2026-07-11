@@ -1,15 +1,17 @@
 import {
+  LockOutlined,
   LogoutOutlined,
-  SettingOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import { history, useModel } from '@umijs/max';
 import type { MenuProps } from 'antd';
 import { Spin } from 'antd';
 import { createStyles } from 'antd-style';
-import React from 'react';
+import React, { useState } from 'react';
 import { flushSync } from 'react-dom';
 import { logout } from '@/services/auth';
 import { buildLoginUrl, getCurrentPathWithSearch, LOGIN_PATH } from '@/utils/redirect';
+import { PasswordModal, ProfileModal } from './AccountSettingsModals';
 import HeaderDropdown from '../HeaderDropdown';
 
 export type GlobalHeaderRightProps = {
@@ -45,6 +47,8 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
   menu,
   children,
 }) => {
+  const [activeModal, setActiveModal] = useState<'profile' | 'password' | null>(null);
+
   /**
    * 退出登录，并且将当前的 url 保存
    */
@@ -69,16 +73,29 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
 
   const { initialState, setInitialState } = useModel('@@initialState');
 
+  // onMenuClick 根据菜单项打开对应弹窗或退出登录。
   const onMenuClick: MenuProps['onClick'] = (event) => {
     const { key } = event;
     if (key === 'logout') {
+      // 退出登录需要先清空界面状态，避免旧用户信息短暂残留。
       flushSync(() => {
         setInitialState((s) => ({ ...s, currentUser: undefined }));
       });
       loginOut();
       return;
     }
-    history.push(`/auth/${key}`);
+    if (key === 'profile' || key === 'password') {
+      // 账户设置使用弹窗承载，不再改变当前页面路由。
+      setActiveModal(key);
+    }
+  };
+
+  // handleModalOpenChange 在弹窗关闭时清理当前类型。
+  const handleModalOpenChange = (open: boolean) => {
+    if (!open) {
+      // 两个弹窗共享关闭逻辑，确保同一时间只显示一个弹窗。
+      setActiveModal(null);
+    }
   };
 
   const loading = (
@@ -108,8 +125,13 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
       ? [
           {
             key: 'profile',
-            icon: <SettingOutlined />,
-            label: '个人设置',
+            icon: <UserOutlined />,
+            label: '个人信息',
+          },
+          {
+            key: 'password',
+            icon: <LockOutlined />,
+            label: '修改密码',
           },
           {
             type: 'divider' as const,
@@ -124,14 +146,24 @@ export const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({
   ];
 
   return (
-    <HeaderDropdown
-      menu={{
-        selectedKeys: [],
-        onClick: onMenuClick,
-        items: menuItems,
-      }}
-    >
-      {children}
-    </HeaderDropdown>
+    <>
+      <HeaderDropdown
+        menu={{
+          selectedKeys: [],
+          onClick: onMenuClick,
+          items: menuItems,
+        }}
+      >
+        {children}
+      </HeaderDropdown>
+      <ProfileModal
+        open={activeModal === 'profile'}
+        onOpenChange={handleModalOpenChange}
+      />
+      <PasswordModal
+        open={activeModal === 'password'}
+        onOpenChange={handleModalOpenChange}
+      />
+    </>
   );
 };

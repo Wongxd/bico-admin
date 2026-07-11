@@ -65,6 +65,8 @@ type CRUDHandler[T any, L any, C any, U any] struct {
 	AfterUpdate func(tx *gorm.DB, id uint, existing *T, req *U) error
 	// ReloadAfterUpdate 更新后重新加载返回数据（可选）
 	ReloadAfterUpdate func(tx *gorm.DB, id uint, existing *T) error
+	// AfterUpdateCommit 更新事务提交后的逻辑（可选，不得返回业务错误）
+	AfterUpdateCommit func(id uint, existing *T, req *U)
 
 	// BeforeDelete 删除前校验（可选）
 	BeforeDelete func(tx *gorm.DB, id uint) error
@@ -429,6 +431,10 @@ func (h *CRUDHandler[T, L, C, U]) updateWithRequest(
 	}); err != nil {
 		h.handleRecordError(c, err)
 		return
+	}
+	if h.AfterUpdateCommit != nil {
+		// 缓存失效必须晚于事务提交，避免并发请求回填旧值。
+		h.AfterUpdateCommit(id, &updated, req)
 	}
 
 	h.SuccessWithMessage(c, successMsg, updated)

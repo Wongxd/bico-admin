@@ -18,7 +18,7 @@
 - **[UmiJS 4](https://umijs.org/)** - 企业级前端框架
 - **[TypeScript](https://www.typescriptlang.org/)** - 类型安全
 - **[TipTap](https://tiptap.dev/)** - 富文本编辑器
-- **[Bun](https://bun.sh/)** - 包管理器
+- **[pnpm](https://pnpm.io/)** - 包管理器
 
 ## 快速开始
 
@@ -29,7 +29,7 @@
 vim config/config.yaml
 
 # 执行数据库迁移
-make migrate
+BICO_ADMIN_INITIAL_PASSWORD="本地初始密码" make migrate
 
 # 启动服务
 make serve
@@ -41,13 +41,13 @@ make serve
 cd web
 
 # 安装依赖
-bun install
+pnpm install
 
 # 启动开发服务器
-bun dev
+pnpm dev
 
 # 构建生产版本
-bun run build
+pnpm run build
 ```
 
 ## 开发指南
@@ -153,10 +153,26 @@ make tidy      # 整理依赖
 
 ## 开发环境
 
-- Go 1.21+
+- Go 1.25+
 - MySQL 5.7+
-- Node.js 20+
-- Bun 1.0+ (前端包管理器)
+- Node.js 22+
+- pnpm 11.5+
+
+## Docker 部署
+
+生产启动必须注入独立密钥：
+
+```bash
+export BICO_JWT_SECRET="至少32位的随机密钥"
+export BICO_ADMIN_INITIAL_PASSWORD="至少8位的初始密码"
+export MYSQL_ROOT_PASSWORD="数据库密码"
+
+# 首次部署先迁移，再启动服务
+docker compose run --rm app ./bico-admin migrate
+docker compose up -d
+```
+
+首次迁移后可移除 `BICO_ADMIN_INITIAL_PASSWORD`。生产配置默认使用 MySQL、Redis 和 release 模式。
 
 ## License
 

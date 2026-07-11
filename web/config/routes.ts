@@ -24,12 +24,6 @@ export default [
         ],
     },
     {
-        name: "profile",
-        path: "/auth/profile",
-        component: "./auth/profile",
-        hideInMenu: true
-    },
-    {
         path: "/dashboard",
         name: "dashboard",
         icon: "dashboard",

@@ -17,5 +17,6 @@ export { default as CrudTable } from './CrudTable';
 export { default as ExcelImportExportActions } from './ExcelImportExportActions';
 export { default as RichEditor } from './RichEditor';
 export { default as PageContainer } from './PageContainer';
+export { default as AvatarUpload } from './AvatarUpload';
 
 export { AvatarDropdown, AvatarName };

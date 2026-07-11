@@ -29,7 +29,7 @@ func NewServer(cfg *config.ServerConfig, rateLimiter *middleware.RateLimiter, za
 	engine.Use(zapAccessLogger(zapLogger, cfg.Mode == "debug"))
 
 	// 添加 CORS 中间件
-	engine.Use(middleware.CORS())
+	engine.Use(middleware.CORS(cfg.AllowedOrigins))
 
 	// 添加全局限流中间件（如果启用）
 	if rateLimiter != nil {

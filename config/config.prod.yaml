@@ -1,15 +1,16 @@
 server:
   port: 8080
-  mode: debug  # debug/release
+  mode: release  # debug/release
   embed_static: true  # 是否将前端静态文件打包到二进制文件中
   admin_path: /admin  # 后台前端访问入口
+  allowed_origins: []  # 同源部署无需配置；跨域部署时填写完整域名
 
 app:
   name: Bico Admin
   logo: /admin/logo.png
 
 database:
-  driver: sqlite  # 支持 sqlite / mysql / postgres
+  driver: mysql  # 支持 sqlite / mysql / postgres
   auto_migrate: false  # 生产环境默认关闭启动迁移，避免多实例并发改表
   max_idle_conns: 10
   max_open_conns: 100
@@ -20,10 +21,10 @@ database:
   
   # MySQL 配置
   mysql:
-    host: localhost
+    host: mysql
     port: 3306
     username: root
-    password: root
+    password: ""  # 通过 BICO_DATABASE_MYSQL_PASSWORD 注入
     database: bico_admin
     charset: utf8mb4
   
@@ -38,22 +39,22 @@ database:
     timezone: Asia/Shanghai
 
 log:
-  level: debug        # debug / info / warn / error / fatal
-  format: console     # console / json (console格式更易读，json格式适合日志收集)
+  level: info         # debug / info / warn / error / fatal
+  format: json        # console / json (console格式更易读，json格式适合日志收集)
   output: stdout      # stdout / stderr / 文件路径
 
 cache:
-  driver: memory  # memory / redis
+  driver: redis  # memory / redis
   
   # Redis 配置
   redis:
-    host: localhost
+    host: redis
     port: 6379
     password: ""
     db: 0
 
 jwt:
-  secret: "bico-admin-secret-key-change-in-production"
+  secret: ""  # 必须通过 BICO_JWT_SECRET 注入至少 32 位密钥
   expire_hours: 168  # 7天
 
 rate_limit:
@@ -73,7 +74,6 @@ upload:
     - image/gif
     - image/webp
     - image/avif
-    - image/svg+xml
     - image/tiff
     - image/x-icon
     - image/vnd.microsoft.icon
@@ -87,7 +87,7 @@ upload:
   local:
     base_path: storage/uploads  # 文件保存根目录
     serve_path: /uploads  # 静态文件服务路径
-    url_prefix: http://localhost:8080/uploads  # 返回给前端的完整URL前缀
+    url_prefix: /uploads  # 同源部署使用相对地址
   
   # 七牛云存储配置
   qiniu:

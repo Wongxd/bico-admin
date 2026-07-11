@@ -44,7 +44,7 @@ type permissionDocItem struct {
 type adminRoleDocItem struct {
 	ID          uint     `json:"id"`
 	Name        string   `json:"name"`
-	Code        string   `json:"code"`
+	System      bool     `json:"system"`
 	Description string   `json:"description"`
 	Enabled     bool     `json:"enabled"`
 	Permissions []string `json:"permissions"`

@@ -3,7 +3,7 @@
  */
 import type { ProColumns } from '@ant-design/pro-components';
 import { ProFormText, ProFormTextArea, ProFormSwitch } from '@ant-design/pro-components';
-import { Tag, Space, Drawer, Tree, Button, message } from 'antd';
+import { Tag, Space, Drawer, Tree, Button, message, Tooltip } from 'antd';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { ActionType } from '@ant-design/pro-components';
 import { useAccess } from '@umijs/max';
@@ -16,7 +16,7 @@ import type { Permission } from '@/services/system/admin-role/types';
 interface AdminRole {
   id: number;
   name: string;
-  code: string;
+  system: boolean;
   description: string;
   enabled: boolean;
   permissions?: string[];
@@ -29,8 +29,17 @@ const roleService = createCrudService<AdminRole>('/admin-roles');
 // 列配置
 const columns: ProColumns<AdminRole>[] = [
   { title: 'ID', dataIndex: 'id', width: 80, search: false },
-  { title: '角色名称', dataIndex: 'name', width: 150 },
-  { title: '角色代码', dataIndex: 'code', width: 150 },
+  {
+    title: '角色名称',
+    dataIndex: 'name',
+    width: 220,
+    render: (_, record) => (
+      <Space size={4}>
+        <span>{record.name}</span>
+        {record.system ? <Tag>系统保留</Tag> : null}
+      </Space>
+    ),
+  },
   { title: '描述', dataIndex: 'description', search: false, width: 200, ellipsis: true },
   {
     title: '状态',
@@ -44,19 +53,13 @@ const columns: ProColumns<AdminRole>[] = [
 ];
 
 // 表单内容组件
-const FormContent: React.FC<{ record?: AdminRole }> = ({ record }) => {
-  const isEdit = !!record;
-  return (
-    <>
-      <ProFormText name="name" label="角色名称" placeholder="请输入角色名称" rules={[{ required: true }]} />
-      {!isEdit && (
-        <ProFormText name="code" label="角色代码" placeholder="请输入角色代码" rules={[{ required: true }]} />
-      )}
-      <ProFormTextArea name="description" label="描述" placeholder="请输入描述" />
-      <ProFormSwitch name="enabled" label="状态" initialValue={true} />
-    </>
-  );
-};
+const FormContent: React.FC = () => (
+  <>
+    <ProFormText name="name" label="角色名称" placeholder="请输入角色名称" rules={[{ required: true }]} />
+    <ProFormTextArea name="description" label="描述" placeholder="请输入描述" />
+    <ProFormSwitch name="enabled" label="状态" initialValue={true} />
+  </>
+);
 
 // 权限树工具函数
 const convertToTreeData = (permissions: Permission[]): any[] =>
@@ -143,10 +146,26 @@ export default function AdminRoleList() {
           enabled: params.enabled === 'true' ? true : params.enabled === 'false' ? false : undefined,
         })}
         scrollX={1100}
+        actionColumnWidth={220}
         actionRef={actionRef}
+        getActionDisabledReason={(record, action) =>
+          record.system
+            ? action === 'delete' ? '系统保留角色不可删除' : '系统保留角色不可修改'
+            : undefined
+        }
         renderActions={(record, defaultActions) => (
           <Space>
-            {access['system:admin_role:permission'] && <a onClick={() => handleOpenDrawer(record)}>配置权限</a>}
+            {access['system:admin_role:permission'] && (
+              record.system ? (
+                <Tooltip title="超级管理员自动拥有全部权限">
+                  <span title="超级管理员自动拥有全部权限">
+                    <Button type="link" size="small" disabled style={{ height: 'auto', padding: 0 }}>配置权限</Button>
+                  </span>
+                </Tooltip>
+              ) : (
+                <a onClick={() => handleOpenDrawer(record)}>配置权限</a>
+              )
+            )}
             {defaultActions}
           </Space>
         )}

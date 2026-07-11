@@ -2,6 +2,9 @@ package migrate
 
 import (
 	"fmt"
+	"os"
+	"strings"
+	"unicode/utf8"
 
 	adminModel "bico-admin/internal/admin/model"
 	"bico-admin/internal/core/logger"
@@ -12,7 +15,7 @@ import (
 )
 
 // AutoMigrate 自动迁移数据表
-func AutoMigrate(db *gorm.DB) error {
+func AutoMigrate(db *gorm.DB, mode string) error {
 	// Admin 模块模型
 	if err := db.AutoMigrate(
 		&adminModel.Menu{},
@@ -24,8 +27,8 @@ func AutoMigrate(db *gorm.DB) error {
 		return err
 	}
 
-	// 初始化管理员账户
-	if err := initAdminUser(db); err != nil {
+	// 初始化超级管理员角色与首个管理员账户。
+	if err := initSuperAdmin(db, mode); err != nil {
 		return err
 	}
 
@@ -34,22 +37,76 @@ func AutoMigrate(db *gorm.DB) error {
 	return nil
 }
 
-// initAdminUser 初始化管理员账户
-func initAdminUser(db *gorm.DB) error {
+// initSuperAdmin 初始化超级管理员角色和账号关联。
+// 既有数据库会将原 admin 账号迁移到保留角色，保持升级前权限。
+func initSuperAdmin(db *gorm.DB, mode string) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		role := adminModel.AdminRole{
+			Name:        "超级管理员",
+			Code:        adminModel.SuperAdminRoleCode,
+			Description: "系统保留角色，自动拥有全部权限",
+			Enabled:     true,
+		}
+		if err := tx.Where("code = ?", adminModel.SuperAdminRoleCode).FirstOrCreate(&role).Error; err != nil {
+			return fmt.Errorf("初始化超级管理员角色失败: %w", err)
+		}
+		if !role.Enabled {
+			// 系统保留角色必须保持启用，否则所有超级管理员会同时失权。
+			if err := tx.Model(&role).Update("enabled", true).Error; err != nil {
+				return fmt.Errorf("启用超级管理员角色失败: %w", err)
+			}
+		}
+
+		admin, err := ensureInitialAdmin(tx, mode)
+		if err != nil {
+			return err
+		}
+		if admin == nil {
+			// 已有用户但不存在历史 admin 账号时，不擅自提升任意用户。
+			return nil
+		}
+
+		relation := adminModel.AdminUserRole{UserID: admin.ID, RoleID: role.ID}
+		if err := tx.Where("user_id = ? AND role_id = ?", admin.ID, role.ID).FirstOrCreate(&relation).Error; err != nil {
+			return fmt.Errorf("授予超级管理员角色失败: %w", err)
+		}
+		return nil
+	})
+}
+
+// ensureInitialAdmin 确保空数据库拥有首个管理员账号。
+// 所有环境只接受环境变量密码，杜绝默认凭据进入数据库。
+func ensureInitialAdmin(db *gorm.DB, mode string) (*adminModel.AdminUser, error) {
 	var count int64
 	if err := db.Model(&adminModel.AdminUser{}).Count(&count).Error; err != nil {
-		return err
+		return nil, err
 	}
 
 	if count > 0 {
-		// 已存在管理员账号时跳过初始化，避免覆盖线上/已有环境数据
-		logger.Warn("管理员账户已存在，跳过初始化")
-		return nil
+		var admin adminModel.AdminUser
+		if err := db.Where("username = ?", "admin").First(&admin).Error; err != nil {
+			// 历史 admin 不存在时保持现有账号不变，避免意外提权。
+			if err == gorm.ErrRecordNotFound {
+				return nil, nil
+			}
+			return nil, err
+		}
+		return &admin, nil
 	}
 
-	hashedPassword, err := password.Hash("admin")
+	initialPassword := strings.TrimSpace(os.Getenv("BICO_ADMIN_INITIAL_PASSWORD"))
+	if initialPassword == "" {
+		// 所有环境都必须显式提供密码，杜绝可预测的默认凭据。
+		return nil, fmt.Errorf("首次迁移必须通过 BICO_ADMIN_INITIAL_PASSWORD 设置管理员密码")
+	}
+	if mode == "release" && utf8.RuneCountInString(initialPassword) < 8 {
+		// 与用户创建、密码修改接口保持一致，统一采用八位下限。
+		return nil, fmt.Errorf("生产管理员初始密码不得少于 8 位")
+	}
+
+	hashedPassword, err := password.Hash(initialPassword)
 	if err != nil {
-		return fmt.Errorf("密码加密失败: %w", err)
+		return nil, fmt.Errorf("密码加密失败: %w", err)
 	}
 
 	admin := adminModel.AdminUser{
@@ -61,10 +118,9 @@ func initAdminUser(db *gorm.DB) error {
 	}
 
 	if err := db.Create(&admin).Error; err != nil {
-		return fmt.Errorf("创建管理员失败: %w", err)
+		return nil, fmt.Errorf("创建管理员失败: %w", err)
 	}
 
-	logger.Info("初始化管理员账户成功", zap.String("username", "admin"), zap.String("password", "admin"))
-	logger.Info("admin 账户自动拥有所有权限，后续新增权限无需手动分配")
-	return nil
+	logger.Info("初始化管理员账户成功", zap.String("username", "admin"))
+	return &admin, nil
 }

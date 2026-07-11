@@ -2,11 +2,14 @@ package model
 
 import "bico-admin/internal/core/model"
 
+const SuperAdminRoleCode = "super_admin"
+
 // AdminRole 角色模型
 type AdminRole struct {
 	model.BaseModel
 	Name        string   `gorm:"size:64;uniqueIndex;not null" json:"name"`
-	Code        string   `gorm:"size:64;uniqueIndex;not null" json:"code"`
+	Code        string   `gorm:"size:64;uniqueIndex;not null" json:"-"`
+	System      bool     `gorm:"-" json:"system"`
 	Description string   `gorm:"size:255" json:"description"`
 	Enabled     bool     `gorm:"default:true" json:"enabled"`
 	Permissions []string `gorm:"-" json:"permissions"`

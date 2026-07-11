@@ -43,14 +43,17 @@ func (u *LocalUploader) Upload(file *multipart.FileHeader, subPath string) (stri
 	defer src.Close()
 
 	filename := u.generateFilename(file.Filename)
-	
-	fullSubPath := filepath.Join(u.basePath, subPath)
+
+	fullSubPath, err := safeLocalPath(u.basePath, subPath)
+	if err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(fullSubPath, 0755); err != nil {
 		return "", ErrUploadFailed
 	}
 
 	filePath := filepath.Join(fullSubPath, filename)
-	
+
 	dst, err := os.Create(filePath)
 	if err != nil {
 		return "", ErrUploadFailed
@@ -66,13 +69,13 @@ func (u *LocalUploader) Upload(file *multipart.FileHeader, subPath string) (stri
 	if u.urlPrefix == "" {
 		return "/" + urlPath, nil
 	}
-	
+
 	// 如果 urlPrefix 以 / 结尾，去掉末尾的 /
 	prefix := u.urlPrefix
 	if len(prefix) > 0 && prefix[len(prefix)-1] == '/' {
 		prefix = prefix[:len(prefix)-1]
 	}
-	
+
 	return prefix + "/" + urlPath, nil
 }
 
@@ -82,8 +85,15 @@ func (u *LocalUploader) Delete(url string) error {
 		return nil
 	}
 
-	relPath := strings.TrimPrefix(url, u.urlPrefix)
-	filePath := filepath.Join(u.basePath, relPath)
+	if u.urlPrefix != "" && !strings.HasPrefix(url, u.urlPrefix) {
+		// 只允许删除当前存储驱动生成的 URL。
+		return ErrInvalidPath
+	}
+	relPath := strings.TrimPrefix(strings.TrimPrefix(url, u.urlPrefix), "/")
+	filePath, err := safeLocalPath(u.basePath, relPath)
+	if err != nil {
+		return err
+	}
 
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		return nil
@@ -94,36 +104,35 @@ func (u *LocalUploader) Delete(url string) error {
 
 // ValidateFile 验证文件
 func (u *LocalUploader) ValidateFile(file *multipart.FileHeader) error {
-	if file.Size > u.maxSize {
-		return ErrFileTooLarge
-	}
-
-	contentType := file.Header.Get("Content-Type")
-	if !u.isAllowedType(contentType) {
-		return ErrInvalidFileType
-	}
-
-	return nil
-}
-
-// isAllowedType 检查文件类型是否允许
-func (u *LocalUploader) isAllowedType(contentType string) bool {
-	for _, allowed := range u.allowedTypes {
-		if allowed == contentType {
-			return true
-		}
-	}
-	return false
+	return validateFileContent(file, u.maxSize, u.allowedTypes)
 }
 
 // generateFilename 生成唯一文件名
 func (u *LocalUploader) generateFilename(originalFilename string) string {
 	ext := filepath.Ext(originalFilename)
-	
+
 	timestamp := time.Now().Format("20060102150405")
 	hash := md5.New()
 	hash.Write([]byte(fmt.Sprintf("%s%d", originalFilename, time.Now().UnixNano())))
 	hashString := hex.EncodeToString(hash.Sum(nil))[:8]
-	
+
 	return fmt.Sprintf("%s_%s%s", timestamp, hashString, ext)
+}
+
+// safeLocalPath 将相对路径限制在上传根目录内。
+// 路径穿越或绝对路径会被拒绝，避免覆盖、读取或删除站外文件。
+func safeLocalPath(basePath string, relativePath string) (string, error) {
+	baseAbs, err := filepath.Abs(basePath)
+	if err != nil {
+		return "", ErrInvalidPath
+	}
+	candidate, err := filepath.Abs(filepath.Join(baseAbs, relativePath))
+	if err != nil {
+		return "", ErrInvalidPath
+	}
+	rel, err := filepath.Rel(baseAbs, candidate)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", ErrInvalidPath
+	}
+	return candidate, nil
 }

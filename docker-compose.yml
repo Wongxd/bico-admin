@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   app:
     build: .
@@ -8,14 +6,17 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./config.yaml:/app/config.yaml
-      - ./data:/app/data
-      - ./logs:/app/logs
+      - ./storage:/app/storage
     environment:
-      - TZ=Asia/Shanghai
+      TZ: Asia/Shanghai
+      BICO_JWT_SECRET: ${BICO_JWT_SECRET:?请设置 BICO_JWT_SECRET}
+      BICO_ADMIN_INITIAL_PASSWORD: ${BICO_ADMIN_INITIAL_PASSWORD:-}
+      BICO_DATABASE_MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请设置 MYSQL_ROOT_PASSWORD}
     depends_on:
-      - mysql
-      - redis
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - bico-network
@@ -23,15 +24,18 @@ services:
   mysql:
     image: mysql:8.0
     container_name: bico-mysql
-    ports:
-      - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: root123456
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请设置 MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: bico_admin
       TZ: Asia/Shanghai
     volumes:
       - mysql-data:/var/lib/mysql
     command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     restart: unless-stopped
     networks:
       - bico-network
@@ -39,10 +43,13 @@ services:
   redis:
     image: redis:7-alpine
     container_name: bico-redis
-    ports:
-      - "6379:6379"
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     restart: unless-stopped
     networks:
       - bico-network

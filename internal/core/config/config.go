@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
@@ -24,10 +25,11 @@ type Config struct {
 
 // ServerConfig 服务器配置
 type ServerConfig struct {
-	Port        int    `mapstructure:"port"`
-	Mode        string `mapstructure:"mode"`
-	EmbedStatic bool   `mapstructure:"embed_static"`
-	AdminPath   string `mapstructure:"admin_path"`
+	Port           int      `mapstructure:"port"`
+	Mode           string   `mapstructure:"mode"`
+	EmbedStatic    bool     `mapstructure:"embed_static"`
+	AdminPath      string   `mapstructure:"admin_path"`
+	AllowedOrigins []string `mapstructure:"allowed_origins"`
 }
 
 // AppConfig 应用配置
@@ -195,16 +197,15 @@ func NewConfigManager(configPath string, logger *zap.Logger) (*ConfigManager, er
 		return nil, err
 	}
 
-	v := viper.New()
-	v.SetConfigFile(actualPath)
+	v := newViper(actualPath)
 
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("读取配置文件失败: %w", err)
 	}
 
-	cfg := &Config{}
-	if err := v.Unmarshal(cfg); err != nil {
-		return nil, fmt.Errorf("解析配置文件失败: %w", err)
+	cfg, err := decodeConfig(v)
+	if err != nil {
+		return nil, err
 	}
 
 	cm := &ConfigManager{
@@ -226,8 +227,8 @@ func NewConfigManager(configPath string, logger *zap.Logger) (*ConfigManager, er
 func (cm *ConfigManager) onConfigChange(e fsnotify.Event) {
 	cm.logger.Info("检测到配置文件变化", zap.String("file", e.Name))
 
-	newConfig := &Config{}
-	if err := cm.viper.Unmarshal(newConfig); err != nil {
+	newConfig, err := decodeConfig(cm.viper)
+	if err != nil {
 		cm.logger.Error("重新加载配置失败", zap.Error(err))
 		return
 	}
@@ -259,26 +260,74 @@ func (cm *ConfigManager) GetRateLimitConfig() RateLimitConfig {
 // 2. ./config.yaml（项目根目录，Docker 友好）
 // 3. ./config/config.yaml（传统位置）
 func LoadConfig(configPath string) (*Config, error) {
-	cfg := &Config{}
-
 	// 查找配置文件
 	actualPath, err := findConfigFile(configPath)
 	if err != nil {
 		return nil, err
 	}
 
-	v := viper.New()
-	v.SetConfigFile(actualPath)
+	v := newViper(actualPath)
 
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("读取配置文件失败: %w", err)
 	}
 
+	return decodeConfig(v)
+}
+
+// newViper 创建支持环境变量覆盖的配置读取器。
+// 敏感配置使用 BICO_ 前缀，避免生产密钥写入配置文件。
+func newViper(configPath string) *viper.Viper {
+	v := viper.New()
+	v.SetConfigFile(configPath)
+	v.SetEnvPrefix("BICO")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+	_ = v.BindEnv("jwt.secret")
+	_ = v.BindEnv("database.mysql.password")
+	_ = v.BindEnv("database.postgres.password")
+	_ = v.BindEnv("cache.redis.password")
+	_ = v.BindEnv("upload.qiniu.access_key")
+	_ = v.BindEnv("upload.qiniu.secret_key")
+	_ = v.BindEnv("upload.aliyun.access_key_id")
+	_ = v.BindEnv("upload.aliyun.access_key_secret")
+	return v
+}
+
+// decodeConfig 解析并校验配置。
+// 热更新和首次加载共用此路径，防止非法配置进入运行时。
+func decodeConfig(v *viper.Viper) (*Config, error) {
+	cfg := &Config{}
 	if err := v.Unmarshal(cfg); err != nil {
 		return nil, fmt.Errorf("解析配置文件失败: %w", err)
 	}
-
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
 	return cfg, nil
+}
+
+// Validate 校验启动所需的安全配置。
+// release 模式必须使用独立强密钥，避免示例配置被直接用于生产。
+func (c *Config) Validate() error {
+	if c.Server.Mode != "debug" && c.Server.Mode != "release" && c.Server.Mode != "test" {
+		return fmt.Errorf("server.mode 仅支持 debug、release 或 test")
+	}
+	if c.JWT.ExpireHours <= 0 {
+		return fmt.Errorf("jwt.expire_hours 必须大于 0")
+	}
+	if c.Server.Mode == "release" {
+		secret := strings.TrimSpace(c.JWT.Secret)
+		if len(secret) < 32 || secret == "bico-admin-secret-key-change-in-production" {
+			return fmt.Errorf("release 模式必须通过 BICO_JWT_SECRET 配置至少 32 位的 JWT 密钥")
+		}
+		for _, origin := range c.Server.AllowedOrigins {
+			if origin == "*" {
+				return fmt.Errorf("release 模式不允许 CORS 通配来源")
+			}
+		}
+	}
+	return nil
 }
 
 // findConfigFile 查找配置文件

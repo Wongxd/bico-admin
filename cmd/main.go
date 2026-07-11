@@ -81,7 +81,7 @@ func runStartupMigration(ctx *app.AppContext) error {
 	}
 
 	ctx.Logger.Info("开始启动迁移")
-	if err := migrate.AutoMigrate(ctx.DB); err != nil {
+	if err := migrate.AutoMigrate(ctx.DB, ctx.Cfg.Server.Mode); err != nil {
 		// 迁移失败时阻断启动，避免服务运行在不完整的表结构上。
 		return err
 	}
@@ -102,7 +102,7 @@ var migrateCmd = &cobra.Command{
 		}
 
 		ctx.Logger.Info("开始数据库迁移")
-		if err := migrate.AutoMigrate(ctx.DB); err != nil {
+		if err := migrate.AutoMigrate(ctx.DB, ctx.Cfg.Server.Mode); err != nil {
 			ctx.Logger.Error("数据库迁移失败", zap.Error(err))
 			os.Exit(1)
 		}

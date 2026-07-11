@@ -13,7 +13,7 @@ export interface Permission {
 export interface AdminRole {
   id: number;
   name: string;
-  code: string;
+  system: boolean;
 }
 
 /** 更新权限参数 */

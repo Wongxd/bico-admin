@@ -109,25 +109,7 @@ func (u *AliyunUploader) Delete(url string) error {
 
 // ValidateFile 验证文件
 func (u *AliyunUploader) ValidateFile(file *multipart.FileHeader) error {
-	if file.Size > u.maxSize {
-		return ErrFileTooLarge
-	}
-
-	if len(u.allowedTypes) > 0 {
-		contentType := file.Header.Get("Content-Type")
-		allowed := false
-		for _, t := range u.allowedTypes {
-			if t == contentType {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
-			return ErrInvalidFileType
-		}
-	}
-
-	return nil
+	return validateFileContent(file, u.maxSize, u.allowedTypes)
 }
 
 // generateFilename 生成文件名

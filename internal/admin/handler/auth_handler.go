@@ -77,7 +77,11 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		token = token[7:]
 	}
 
-	h.authService.Logout(token)
+	if err := h.authService.Logout(token); err != nil {
+		// 黑名单写入失败时不能伪装成已退出。
+		h.Error(c, "退出失败")
+		return
+	}
 	h.SuccessWithMessage(c, "退出成功", nil)
 }
 
@@ -106,7 +110,7 @@ func (h *AuthHandler) CurrentUser(c *gin.Context) {
 
 // UpdateProfile 更新用户资料
 // @Summary 更新个人资料
-// @Description 更新当前登录用户的名称和头像
+// @Description 更新当前登录用户的用户名、名称和头像
 // @Tags 认证
 // @Accept json
 // @Produce json

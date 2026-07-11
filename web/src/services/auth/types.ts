@@ -24,6 +24,7 @@ export interface CurrentUser {
 }
 
 export interface UpdateProfileParams {
+  username?: string;
   name?: string;
   avatar?: string;
 }

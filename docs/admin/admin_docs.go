@@ -861,9 +861,6 @@ const docTemplateadmin = `{
         "handler.adminRoleDocItem": {
             "type": "object",
             "properties": {
-                "code": {
-                    "type": "string"
-                },
                 "description": {
                     "type": "string"
                 },
@@ -881,6 +878,9 @@ const docTemplateadmin = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "system": {
+                    "type": "boolean"
                 }
             }
         },
@@ -1038,7 +1038,8 @@ const docTemplateadmin = `{
             ],
             "properties": {
                 "newPassword": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 8
                 },
                 "oldPassword": {
                     "type": "string"

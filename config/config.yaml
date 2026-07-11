@@ -3,6 +3,8 @@ server:
   mode: debug  # debug/release
   embed_static: true  # 是否将前端静态文件打包到二进制文件中
   admin_path: /admin  # 后台前端访问入口
+  allowed_origins:  # 仅允许本地前端开发服务器跨域访问
+    - http://localhost:8000
 
 app:
   name: Bico Admin
@@ -73,7 +75,6 @@ upload:
     - image/gif
     - image/webp
     - image/avif
-    - image/svg+xml
     - image/tiff
     - image/x-icon
     - image/vnd.microsoft.icon

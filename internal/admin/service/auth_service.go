@@ -17,19 +17,22 @@ import (
 )
 
 var (
-	ErrUserNotFound     = errors.New("用户不存在")
-	ErrInvalidPassword  = errors.New("密码错误")
-	ErrUserDisabled     = errors.New("用户已被禁用")
-	ErrOldPasswordWrong = errors.New("原密码错误")
-	ErrLoginLocked      = errors.New("登录失败次数过多，请15分钟后再试")
+	ErrUserNotFound       = errors.New("用户不存在")
+	ErrInvalidCredentials = errors.New("用户名或密码错误")
+	ErrUserDisabled       = errors.New("用户已被禁用")
+	ErrOldPasswordWrong   = errors.New("原密码错误")
+	ErrLoginLocked        = errors.New("登录失败次数过多，请15分钟后再试")
+	ErrUsernameRequired   = errors.New("用户名不能为空")
+	ErrUsernameExists     = errors.New("用户名已存在")
 )
 
 const (
-	permissionCacheTTL = 5 * time.Minute
-	userStatusCacheTTL = 1 * time.Minute
-	loginFailTTL       = 15 * time.Minute
-	loginLockTTL       = 15 * time.Minute
-	maxLoginFailCount  = 5
+	permissionCacheTTL   = 5 * time.Minute
+	userStatusCacheTTL   = 1 * time.Minute
+	tokenVersionCacheTTL = 1 * time.Minute
+	loginFailTTL         = 15 * time.Minute
+	loginLockTTL         = 15 * time.Minute
+	maxLoginFailCount    = 5
 )
 
 // LoginRequest 登录请求
@@ -55,14 +58,15 @@ type UserInfo struct {
 
 // UpdateProfileRequest 更新用户资料请求
 type UpdateProfileRequest struct {
-	Name   string `json:"name"`
-	Avatar string `json:"avatar"`
+	Username *string `json:"username"`
+	Name     string  `json:"name"`
+	Avatar   string  `json:"avatar"`
 }
 
 // ChangePasswordRequest 修改密码请求
 type ChangePasswordRequest struct {
 	OldPassword string `json:"oldPassword" binding:"required"`
-	NewPassword string `json:"newPassword" binding:"required"`
+	NewPassword string `json:"newPassword" binding:"required,min=8"`
 }
 
 // IAuthService 认证服务接口
@@ -70,6 +74,7 @@ type IAuthService interface {
 	Login(req *LoginRequest) (*LoginResponse, error)
 	Logout(token string) error
 	IsTokenBlacklisted(token string) bool
+	IsTokenVersionValid(userID uint, version uint) bool
 	GetUserByID(userID uint) (*UserInfo, error)
 	UpdateProfile(userID uint, req *UpdateProfileRequest) (*UserInfo, error)
 	ChangePassword(userID uint, req *ChangePasswordRequest) error
@@ -82,6 +87,7 @@ type AuthCacheInvalidator interface {
 	InvalidateUserPermissionCache(userID uint)
 	InvalidateRoleUsersPermissionCache(roleID uint)
 	InvalidateUserStatusCache(userID uint)
+	InvalidateUserTokenVersionCache(userID uint)
 }
 
 // AuthService 认证服务
@@ -112,7 +118,7 @@ func (s *AuthService) Login(req *LoginRequest) (*LoginResponse, error) {
 	err := s.db.Where("username = ?", username).First(&user).Error
 	if err != nil {
 		s.recordLoginFailure(username)
-		return nil, ErrUserNotFound
+		return nil, ErrInvalidCredentials
 	}
 
 	if !user.Enabled {
@@ -121,10 +127,10 @@ func (s *AuthService) Login(req *LoginRequest) (*LoginResponse, error) {
 
 	if !password.Verify(user.Password, req.Password) {
 		s.recordLoginFailure(username)
-		return nil, ErrInvalidPassword
+		return nil, ErrInvalidCredentials
 	}
 
-	token, err := s.jwtManager.GenerateToken(user.ID, user.Username)
+	token, err := s.jwtManager.GenerateToken(user.ID, user.Username, user.TokenVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -205,15 +211,46 @@ func (s *AuthService) Logout(token string) error {
 		return nil
 	}
 
-	blacklistKey := "token:blacklist:" + token
-	// 设置 token 黑名单，过期时间 7 天
-	return s.cache.Set(blacklistKey, true, 7*24*time.Hour)
+	claims, err := s.jwtManager.ParseToken(token)
+	if err != nil {
+		// 无效令牌不需要进入黑名单，避免产生永不过期的缓存项。
+		return nil
+	}
+
+	ttl := time.Until(time.Unix(claims.Exp, 0))
+	if ttl <= 0 {
+		// 已过期令牌不会再通过鉴权，无需写入缓存。
+		return nil
+	}
+	return s.cache.Set("token:blacklist:"+token, true, ttl)
 }
 
 // IsTokenBlacklisted 检查 token 是否在黑名单中
 func (s *AuthService) IsTokenBlacklisted(token string) bool {
 	blacklistKey := "token:blacklist:" + token
 	return s.cache.Exists(blacklistKey)
+}
+
+// IsTokenVersionValid 校验令牌版本是否仍与用户一致。
+// 修改密码会递增数据库版本，从而立即废弃该用户此前签发的全部令牌。
+func (s *AuthService) IsTokenVersionValid(userID uint, version uint) bool {
+	cacheKey := tokenVersionCacheKey(userID)
+	if value, err := s.cache.Get(cacheKey); err == nil {
+		// 内存缓存保存 uint，Redis 反序列化后可能成为 float64。
+		switch cached := value.(type) {
+		case uint:
+			return cached == version
+		case float64:
+			return uint(cached) == version
+		}
+	}
+
+	var currentVersion uint
+	if err := s.db.Model(&model.AdminUser{}).Where("id = ?", userID).Pluck("token_version", &currentVersion).Error; err != nil {
+		return false
+	}
+	_ = s.cache.Set(cacheKey, currentVersion, tokenVersionCacheTTL)
+	return currentVersion == version
 }
 
 // GetUserByID 根据用户ID获取用户信息
@@ -262,11 +299,34 @@ func (s *AuthService) UpdateProfile(userID uint, req *UpdateProfileRequest) (*Us
 	}
 
 	updates := make(map[string]interface{})
+	if req.Username != nil {
+		username := normalizeLoginUsername(*req.Username)
+		if username == "" {
+			// 显式提交空用户名时拒绝更新，头像单独更新不受影响。
+			return nil, ErrUsernameRequired
+		}
+		if username != user.Username {
+			// 仅在用户名变更时查重，避免无效查询。
+			exists, existsErr := crud.Exists(s.db, &model.AdminUser{}, "username = ? AND id <> ?", username, userID)
+			if existsErr != nil {
+				// 查重失败时不冒险执行更新。
+				return nil, existsErr
+			}
+			if exists {
+				// 用户名全局唯一，重复值需要用户重新输入。
+				return nil, ErrUsernameExists
+			}
+			updates["username"] = username
+			user.Username = username
+		}
+	}
 	if req.Name != "" {
 		updates["name"] = req.Name
+		user.Name = req.Name
 	}
 	if req.Avatar != "" {
 		updates["avatar"] = req.Avatar
+		user.Avatar = req.Avatar
 	}
 
 	if len(updates) > 0 {
@@ -314,10 +374,14 @@ func (s *AuthService) ChangePassword(userID uint, req *ChangePasswordRequest) er
 		return err
 	}
 
-	err = s.db.Model(&user).Update("password", hashedPassword).Error
+	err = s.db.Model(&user).Updates(map[string]interface{}{
+		"password":      hashedPassword,
+		"token_version": gorm.Expr("token_version + 1"),
+	}).Error
 	if err != nil {
 		return err
 	}
+	s.InvalidateUserTokenVersionCache(userID)
 
 	return nil
 }
@@ -329,14 +393,15 @@ func (s *AuthService) GetUserPermissions(userID uint) ([]string, error) {
 		return cachedPerms, nil
 	}
 
-	// 获取用户信息
-	var user model.AdminUser
-	if err := s.db.Select("username").First(&user, userID).Error; err != nil {
+	// 超级管理员能力由保留角色授予，不再依赖固定用户名。
+	var superAdminCount int64
+	if err := s.db.Table("admin_user_roles").
+		Joins("JOIN admin_roles ON admin_user_roles.role_id = admin_roles.id").
+		Where("admin_user_roles.user_id = ? AND admin_roles.code = ? AND admin_roles.enabled = ?", userID, model.SuperAdminRoleCode, true).
+		Count(&superAdminCount).Error; err != nil {
 		return nil, err
 	}
-
-	// 如果是默认管理员账户，返回所有权限
-	if user.Username == "admin" {
+	if superAdminCount > 0 {
 		adminPerms := crud.GetAllPermissionKeys()
 		s.setPermissionsCache(userID, adminPerms)
 		return adminPerms, nil
@@ -402,6 +467,11 @@ func (s *AuthService) InvalidateUserStatusCache(userID uint) {
 	_ = s.cache.Delete(userStatusCacheKey(userID))
 }
 
+// InvalidateUserTokenVersionCache 失效用户令牌版本缓存。
+func (s *AuthService) InvalidateUserTokenVersionCache(userID uint) {
+	_ = s.cache.Delete(tokenVersionCacheKey(userID))
+}
+
 // getPermissionsCache 获取用户权限缓存
 func (s *AuthService) getPermissionsCache(userID uint) ([]string, bool) {
 	value, err := s.cache.Get(permissionCacheKey(userID))
@@ -452,6 +522,11 @@ func permissionCacheKey(userID uint) string {
 // userStatusCacheKey 生成用户状态缓存 key
 func userStatusCacheKey(userID uint) string {
 	return fmt.Sprintf("auth:user:%d:enabled", userID)
+}
+
+// tokenVersionCacheKey 生成用户令牌版本缓存 key。
+func tokenVersionCacheKey(userID uint) string {
+	return fmt.Sprintf("auth:user:%d:token-version", userID)
 }
 
 // parseStringSlice 将缓存值安全转换为字符串数组

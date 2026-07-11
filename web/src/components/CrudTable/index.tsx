@@ -1,7 +1,7 @@
 import { PlusOutlined } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
-import { Button, message, Popconfirm, Space } from 'antd';
+import { Button, message, Popconfirm, Space, Tooltip } from 'antd';
 import React, { useRef, useState, useMemo, useCallback, useEffect } from 'react';
 import { useAccess } from '@umijs/max';
 import { PageContainer } from '@/components';
@@ -44,6 +44,10 @@ export interface CrudTableProps<T extends { id: number }> {
   scrollX?: number;
   /** 自定义操作列渲染 */
   renderActions?: (record: T, defaultActions: React.ReactNode) => React.ReactNode;
+  /** 返回默认操作的禁用原因；未返回时保持可用 */
+  getActionDisabledReason?: (record: T, action: 'edit' | 'delete') => string | undefined;
+  /** 操作列宽度，默认 150 */
+  actionColumnWidth?: number;
   /** 额外的工具栏按钮 */
   toolBarExtra?: React.ReactNode[];
   /** 是否显示新建按钮，默认 true */
@@ -65,6 +69,8 @@ function CrudTable<T extends { id: number }>({
   rowKey = 'id',
   scrollX = 1200,
   renderActions,
+  getActionDisabledReason,
+  actionColumnWidth = 150,
   toolBarExtra,
   showCreate = true,
   showDeleteConfirm = true,
@@ -133,30 +139,49 @@ function CrudTable<T extends { id: number }>({
 
   // 默认操作列
   const defaultActions = useCallback(
-    (record: T) => (
-      <Space>
-        {access[perms.edit] && service.update && (
-          <a onClick={() => handleEdit(record)}>编辑</a>
-        )}
-        {access[perms.delete] && service.delete && (
-          showDeleteConfirm ? (
-            <Popconfirm
-              title={`确定删除该${title}吗？`}
-              onConfirm={() => handleDelete(record.id)}
-              okText="确定"
-              cancelText="取消"
-            >
-              <a style={{ color: '#ff4d4f' }}>删除</a>
-            </Popconfirm>
-          ) : (
-            <a style={{ color: '#ff4d4f' }} onClick={() => handleDelete(record.id)}>
-              删除
-            </a>
-          )
-        )}
-      </Space>
-    ),
-    [access, perms, service, title, handleDelete, handleEdit, showDeleteConfirm]
+    (record: T) => {
+      const editDisabledReason = getActionDisabledReason?.(record, 'edit');
+      const deleteDisabledReason = getActionDisabledReason?.(record, 'delete');
+
+      return (
+        <Space>
+          {access[perms.edit] && service.update && (
+            editDisabledReason ? (
+              <Tooltip title={editDisabledReason}>
+                <span title={editDisabledReason}>
+                  <Button type="link" size="small" disabled style={{ height: 'auto', padding: 0 }}>编辑</Button>
+                </span>
+              </Tooltip>
+            ) : (
+              <a onClick={() => handleEdit(record)}>编辑</a>
+            )
+          )}
+          {access[perms.delete] && service.delete && (
+            deleteDisabledReason ? (
+              <Tooltip title={deleteDisabledReason}>
+                <span title={deleteDisabledReason}>
+                  <Button type="link" size="small" danger disabled style={{ height: 'auto', padding: 0 }}>删除</Button>
+                </span>
+              </Tooltip>
+            ) : showDeleteConfirm ? (
+              <Popconfirm
+                title={`确定删除该${title}吗？`}
+                onConfirm={() => handleDelete(record.id)}
+                okText="确定"
+                cancelText="取消"
+              >
+                <a style={{ color: '#ff4d4f' }}>删除</a>
+              </Popconfirm>
+            ) : (
+              <a style={{ color: '#ff4d4f' }} onClick={() => handleDelete(record.id)}>
+                删除
+              </a>
+            )
+          )}
+        </Space>
+      );
+    },
+    [access, perms, service, title, handleDelete, handleEdit, showDeleteConfirm, getActionDisabledReason]
   );
 
   // 合并操作列
@@ -166,13 +191,13 @@ function CrudTable<T extends { id: number }>({
       {
         title: '操作',
         valueType: 'option' as const,
-        width: 150,
+        width: actionColumnWidth,
         fixed: isMobile ? false : ('right' as const),
         render: (_: any, record: T) =>
           renderActions ? renderActions(record, defaultActions(record)) : defaultActions(record),
       },
     ],
-    [columns, renderActions, defaultActions, isMobile]
+    [columns, renderActions, defaultActions, isMobile, actionColumnWidth]
   );
 
   return (
