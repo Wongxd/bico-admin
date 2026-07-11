@@ -147,6 +147,7 @@ declare namespace API {
     name: string;
     avatar?: string;
     email?: string;
+    enabled?: boolean;
     permissions?: string[];
   };
 
@@ -159,6 +160,7 @@ declare namespace API {
 
   /** 更新个人信息参数 */
   export type UpdateProfileParams = {
+    username?: string;
     name?: string;
     avatar?: string;
     email?: string;

@@ -40,8 +40,13 @@ const columns: ProColumns<AdminUser>[] = [
   { title: '姓名', dataIndex: 'name', width: 150 },
   {
     title: '角色',
-    dataIndex: 'roles',
-    search: false,
+    dataIndex: 'role_ids',
+    valueType: 'select',
+    fieldProps: { mode: 'multiple' },
+    request: async () => {
+      const res = await getAllAdminRoles();
+      return (res.data || []).map((r: any) => ({ label: r.name, value: r.id }));
+    },
     width: 200,
     render: (_, r) => <Space size={4}>{r.roles?.map((role) => <Tag key={role.id} color="blue">{role.name}</Tag>)}</Space>,
   },
@@ -118,7 +123,7 @@ const FormContent: React.FC<{ record?: AdminUser }> = ({ record }) => {
         />
       </div>
       <ProFormSelect
-        name="roleIds"
+        name="role_ids"
         label="角色"
         mode="multiple"
         request={async () => {
@@ -151,10 +156,11 @@ export default function AdminUserList() {
         username: r.username,
         name: r.name,
         enabled: r.enabled,
-        roleIds: r.roles?.map((role) => role.id),
+        role_ids: r.roles?.map((role) => role.id),
       })}
       transformParams={(params) => ({
         ...params,
+        role_ids: Array.isArray(params.role_ids) ? params.role_ids.join(',') : params.role_ids,
         enabled: params.enabled === 'true' ? true : params.enabled === 'false' ? false : undefined,
       })}
     />

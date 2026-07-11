@@ -78,6 +78,17 @@ func (m *MemoryCache) Delete(key string) error {
 	return nil
 }
 
+// DeleteMany 在一次加锁中批量删除缓存。
+func (m *MemoryCache) DeleteMany(keys []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, key := range keys {
+		delete(m.items, key)
+	}
+	return nil
+}
+
 // Exists 检查key是否存在
 func (m *MemoryCache) Exists(key string) bool {
 	m.mu.RLock()

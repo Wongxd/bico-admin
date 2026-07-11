@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Button, Card, Descriptions, Typography, message } from 'antd';
+import { Button, Card, Descriptions, Table, Typography, message } from 'antd';
 
 import { PageContainer } from '@/components';
 import { ExcelImportExportActions } from '@/components';
@@ -13,9 +13,15 @@ import {
 const DemoExcelPage: React.FC = () => {
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [importResult, setImportResult] = useState<{ total: number; preview: string[][] }>();
 
   const headers = useMemo(() => ['姓名', '手机号', '年龄', '城市'], []);
+  const demoRows = useMemo(() => [
+    { id: 1, name: '王五', phone: '13600000000', age: 32, city: '深圳' },
+    { id: 2, name: '赵六', phone: '13700000000', age: 25, city: '杭州' },
+    { id: 3, name: '钱七', phone: '13500000000', age: 41, city: '成都' },
+  ], []);
 
   const handleDownloadTemplate = async () => {
     try {
@@ -32,7 +38,8 @@ const DemoExcelPage: React.FC = () => {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const resp: any = await exportDemoExcel();
+      const ids = selectedRowKeys.map((key) => Number(key)).filter((id) => Number.isFinite(id));
+      const resp: any = await exportDemoExcel(ids);
       const blob = resp?.data as Blob;
       const cd = resp?.response?.headers?.get?.('content-disposition');
       const filename = getFilenameFromContentDisposition(cd) || '导出_示例.xlsx';
@@ -80,6 +87,24 @@ const DemoExcelPage: React.FC = () => {
           importModalTitle="导入"
           onImportFile={handleImportFile}
           onDownloadTemplate={handleDownloadTemplate}
+        />
+
+        <Table
+          rowKey="id"
+          size="small"
+          style={{ marginTop: 16 }}
+          pagination={false}
+          rowSelection={{
+            selectedRowKeys,
+            onChange: setSelectedRowKeys,
+          }}
+          columns={[
+            { title: '姓名', dataIndex: 'name' },
+            { title: '手机号', dataIndex: 'phone' },
+            { title: '年龄', dataIndex: 'age' },
+            { title: '城市', dataIndex: 'city' },
+          ]}
+          dataSource={demoRows}
         />
 
         <div style={{ marginTop: 16 }}>

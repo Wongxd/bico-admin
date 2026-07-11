@@ -14,9 +14,10 @@ export async function downloadDemoExcelTemplate() {
   });
 }
 
-export async function exportDemoExcel() {
+export async function exportDemoExcel(ids?: number[]) {
   return request(buildApiUrl('/demo/excel/export'), {
     method: 'GET',
+    params: ids?.length ? { ids: ids.join(',') } : undefined,
     responseType: 'blob',
     getResponse: true,
   });

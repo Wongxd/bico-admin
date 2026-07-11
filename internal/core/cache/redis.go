@@ -23,19 +23,19 @@ func NewRedisCache(cfg interface {
 	GetDB() int
 }) (*RedisCache, error) {
 	addr := fmt.Sprintf("%s:%d", cfg.GetHost(), cfg.GetPort())
-	
+
 	client := redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Password: cfg.GetPassword(),
 		DB:       cfg.GetDB(),
 	})
-	
+
 	// 测试连接
 	ctx := context.Background()
 	if err := client.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("Redis 连接失败: %w", err)
 	}
-	
+
 	return &RedisCache{client: client, ctx: ctx}, nil
 }
 
@@ -45,7 +45,7 @@ func (r *RedisCache) Set(key string, value interface{}, expiration time.Duration
 	if err != nil {
 		return err
 	}
-	
+
 	return r.client.Set(r.ctx, key, string(data), expiration).Err()
 }
 
@@ -55,18 +55,27 @@ func (r *RedisCache) Get(key string) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var value interface{}
 	if err := json.Unmarshal([]byte(result), &value); err != nil {
 		return nil, err
 	}
-	
+
 	return value, nil
 }
 
 // Delete 删除缓存
 func (r *RedisCache) Delete(key string) error {
 	return r.client.Del(r.ctx, key).Err()
+}
+
+// DeleteMany 通过单次 Redis 请求批量删除缓存。
+func (r *RedisCache) DeleteMany(keys []string) error {
+	if len(keys) == 0 {
+		// 空键集无需请求 Redis。
+		return nil
+	}
+	return r.client.Del(r.ctx, keys...).Err()
 }
 
 // Exists 检查key是否存在

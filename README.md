@@ -119,12 +119,13 @@ return []crud.Module{
 ### 前端路由
 
 在 `web/config/routes.ts` 配置：
+
 ```ts
 {
   path: "/system/articles",
   name: "articles",
   component: "./system/articles",
-  access: "system:article:menu"  // 对应后端权限 key
+  access: "system:article:menu"
 }
 ```
 
@@ -144,7 +145,6 @@ make tidy      # 整理依赖
 详细文档位于 `docs/` 目录：
 
 - [后端 CRUD 框架](./docs/crud-pkg.md) - 声明式后端开发指南
-- [前端 CRUD 组件](./docs/frontend-crud.md) - CrudTable 使用指南
 - [项目结构说明](./docs/structure.md)
 - [认证 API](./docs/auth-api.md)
 - [缓存机制](./docs/cache.md)

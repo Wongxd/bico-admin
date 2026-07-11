@@ -19,6 +19,7 @@ export interface CurrentUser {
   username: string;
   name: string;
   avatar: string;
+  enabled?: boolean;
   roles?: string[];
   permissions?: string[];
 }

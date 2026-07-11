@@ -153,6 +153,11 @@ export default function AdminRoleList() {
             ? action === 'delete' ? '系统保留角色不可删除' : '系统保留角色不可修改'
             : undefined
         }
+        rowSelection={{
+          getCheckboxProps: (record) => ({
+            disabled: record.system,
+          }),
+        }}
         renderActions={(record, defaultActions) => (
           <Space>
             {access['system:admin_role:permission'] && (

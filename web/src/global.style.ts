@@ -26,6 +26,9 @@ const useStyles = createStyles(() => {
       listStyle: 'none',
     },
     '@media(max-width: 768px)': {
+      '.ant-drawer .ant-drawer-mask, .ant-drawer .ant-drawer-content-wrapper': {
+        position: 'fixed',
+      },
       'ant-table': {
         width: '100%',
         overflowX: 'auto',

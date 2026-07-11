@@ -1,5 +1,5 @@
 import { PlusOutlined } from '@ant-design/icons';
-import type { ActionType, ProColumns } from '@ant-design/pro-components';
+import type { ActionType, ProColumns, ProTableProps } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import { Button, message, Popconfirm, Space, Tooltip } from 'antd';
 import React, { useRef, useState, useMemo, useCallback, useEffect } from 'react';
@@ -21,6 +21,7 @@ type CrudService<T> = {
   create?: (data: any) => Promise<API.Response<T>>;
   update?: (id: number, data: any) => Promise<API.Response<T>>;
   delete?: (id: number) => Promise<API.Response<null>>;
+  deleteBatch?: (ids: number[]) => Promise<API.Response<null>>;
 };
 
 export interface CrudTableProps<T extends { id: number }> {
@@ -56,6 +57,10 @@ export interface CrudTableProps<T extends { id: number }> {
   showDeleteConfirm?: boolean;
   /** 表格 actionRef，用于外部控制刷新等 */
   actionRef?: React.MutableRefObject<ActionType | null>;
+  /** 判断单行是否允许删除 */
+  canDeleteRecord?: (record: T) => boolean;
+  /** 批量选择配置 */
+  rowSelection?: ProTableProps<T, any>['rowSelection'];
 }
 
 function CrudTable<T extends { id: number }>({
@@ -75,11 +80,14 @@ function CrudTable<T extends { id: number }>({
   showCreate = true,
   showDeleteConfirm = true,
   actionRef: externalActionRef,
+  canDeleteRecord,
+  rowSelection,
 }: CrudTableProps<T>) {
   const internalActionRef = useRef<ActionType>(null);
   const actionRef = externalActionRef || internalActionRef;
   const [modalOpen, setModalOpen] = useState(false);
   const [currentRow, setCurrentRow] = useState<T>();
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const access = useAccess() as Record<string, boolean>;
   const [isMobile, setIsMobile] = useState(() => 
     typeof window !== 'undefined' && window.innerWidth < 768
@@ -127,6 +135,27 @@ function CrudTable<T extends { id: number }>({
     [service]
   );
 
+  const handleDeleteBatch = useCallback(
+    async () => {
+      if (!service.deleteBatch || selectedRowKeys.length === 0) return;
+
+      try {
+        const ids = selectedRowKeys.map((key) => Number(key)).filter((id) => Number.isFinite(id));
+        const res = await service.deleteBatch(ids);
+        if (res.code === 0) {
+          message.success('批量删除成功');
+          setSelectedRowKeys([]);
+          actionRef.current?.reload();
+        } else {
+          message.error(res.msg || '批量删除失败');
+        }
+      } catch (error: any) {
+        message.error(error.message || '批量删除失败');
+      }
+    },
+    [actionRef, selectedRowKeys, service]
+  );
+
   const handleEdit = useCallback((record: T) => {
     setCurrentRow(record);
     setModalOpen(true);
@@ -142,6 +171,7 @@ function CrudTable<T extends { id: number }>({
     (record: T) => {
       const editDisabledReason = getActionDisabledReason?.(record, 'edit');
       const deleteDisabledReason = getActionDisabledReason?.(record, 'delete');
+      const canDelete = canDeleteRecord?.(record) !== false;
 
       return (
         <Space>
@@ -163,7 +193,7 @@ function CrudTable<T extends { id: number }>({
                   <Button type="link" size="small" danger disabled style={{ height: 'auto', padding: 0 }}>删除</Button>
                 </span>
               </Tooltip>
-            ) : showDeleteConfirm ? (
+            ) : !canDelete ? null : showDeleteConfirm ? (
               <Popconfirm
                 title={`确定删除该${title}吗？`}
                 onConfirm={() => handleDelete(record.id)}
@@ -181,8 +211,35 @@ function CrudTable<T extends { id: number }>({
         </Space>
       );
     },
-    [access, perms, service, title, handleDelete, handleEdit, showDeleteConfirm, getActionDisabledReason]
+    [
+      access,
+      perms,
+      service,
+      title,
+      handleDelete,
+      handleEdit,
+      showDeleteConfirm,
+      getActionDisabledReason,
+      canDeleteRecord,
+    ]
   );
+
+  const mergedRowSelection = useMemo<ProTableProps<T, any>['rowSelection'] | undefined>(() => {
+    if (!service.deleteBatch || !access[perms.delete]) {
+      return rowSelection;
+    }
+
+    const rowSelectionConfig = rowSelection && typeof rowSelection === 'object' ? rowSelection : {};
+
+    return {
+      ...rowSelectionConfig,
+      selectedRowKeys,
+      onChange: (keys, rows, info) => {
+        setSelectedRowKeys(keys);
+        rowSelectionConfig.onChange?.(keys, rows, info);
+      },
+    };
+  }, [access, perms.delete, rowSelection, selectedRowKeys, service.deleteBatch]);
 
   // 合并操作列
   const finalColumns: ProColumns<T>[] = useMemo(
@@ -224,6 +281,20 @@ function CrudTable<T extends { id: number }>({
         }}
         columns={finalColumns}
         scroll={{ x: scrollX }}
+        rowSelection={mergedRowSelection}
+        tableAlertOptionRender={() =>
+          service.deleteBatch && access[perms.delete] ? (
+            <Popconfirm
+              title={`确定删除选中的 ${selectedRowKeys.length} 个${title}吗？`}
+              onConfirm={handleDeleteBatch}
+              okText="确定"
+              cancelText="取消"
+              disabled={selectedRowKeys.length === 0}
+            >
+              <a style={{ color: '#ff4d4f' }}>批量删除</a>
+            </Popconfirm>
+          ) : null
+        }
       />
 
       <CrudModal<T>

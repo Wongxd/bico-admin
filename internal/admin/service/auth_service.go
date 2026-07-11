@@ -86,8 +86,11 @@ type IAuthService interface {
 type AuthCacheInvalidator interface {
 	InvalidateUserPermissionCache(userID uint)
 	InvalidateRoleUsersPermissionCache(roleID uint)
+	// InvalidateRolesUsersPermissionCache 批量失效多个角色关联用户的权限缓存。
+	InvalidateRolesUsersPermissionCache(roleIDs []uint)
 	InvalidateUserStatusCache(userID uint)
 	InvalidateUserTokenVersionCache(userID uint)
+	InvalidateUsersAuthCache(userIDs []uint)
 }
 
 // AuthService 认证服务
@@ -334,6 +337,10 @@ func (s *AuthService) UpdateProfile(userID uint, req *UpdateProfileRequest) (*Us
 		if err != nil {
 			return nil, err
 		}
+		// 更新后重新读取，确保返回值包含最新用户名、姓名和头像。
+		if err := s.db.Where("id = ?", userID).First(&user).Error; err != nil {
+			return nil, err
+		}
 	}
 
 	permissions, err := s.GetUserPermissions(userID)
@@ -450,16 +457,29 @@ func (s *AuthService) InvalidateUserPermissionCache(userID uint) {
 
 // InvalidateRoleUsersPermissionCache 失效指定角色下所有用户的权限缓存
 func (s *AuthService) InvalidateRoleUsersPermissionCache(roleID uint) {
+	s.InvalidateRolesUsersPermissionCache([]uint{roleID})
+}
+
+// InvalidateRolesUsersPermissionCache 失效多个角色下所有用户的权限缓存
+func (s *AuthService) InvalidateRolesUsersPermissionCache(roleIDs []uint) {
+	// 空角色列表没有缓存需要失效，直接返回避免无意义查询。
+	if len(roleIDs) == 0 {
+		return
+	}
+
+	uniqueRoleIDs := crud.UniqueUints(roleIDs)
 	var userIDs []uint
 	if err := s.db.Table("admin_user_roles").
-		Where("role_id = ?", roleID).
+		Where("role_id IN ?", uniqueRoleIDs).
 		Distinct("user_id").
 		Pluck("user_id", &userIDs).Error; err != nil {
 		return
 	}
+	keys := make([]string, 0, len(userIDs))
 	for _, userID := range userIDs {
-		_ = s.cache.Delete(permissionCacheKey(userID))
+		keys = append(keys, permissionCacheKey(userID))
 	}
+	_ = s.cache.DeleteMany(keys)
 }
 
 // InvalidateUserStatusCache 失效指定用户状态缓存
@@ -470,6 +490,15 @@ func (s *AuthService) InvalidateUserStatusCache(userID uint) {
 // InvalidateUserTokenVersionCache 失效用户令牌版本缓存。
 func (s *AuthService) InvalidateUserTokenVersionCache(userID uint) {
 	_ = s.cache.Delete(tokenVersionCacheKey(userID))
+}
+
+// InvalidateUsersAuthCache 批量失效用户权限与状态缓存。
+func (s *AuthService) InvalidateUsersAuthCache(userIDs []uint) {
+	keys := make([]string, 0, len(userIDs)*2)
+	for _, userID := range crud.UniqueUints(userIDs) {
+		keys = append(keys, permissionCacheKey(userID), userStatusCacheKey(userID))
+	}
+	_ = s.cache.DeleteMany(keys)
 }
 
 // getPermissionsCache 获取用户权限缓存

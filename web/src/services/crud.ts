@@ -46,6 +46,13 @@ export function createCrudService<
       request<API.Response<null>>(url(`/${id}`), {
         method: 'DELETE',
       }),
+
+    /** 批量删除 */
+    deleteBatch: (ids: number[]) =>
+      request<API.Response<null>>(url('/batch'), {
+        method: 'DELETE',
+        data: { ids },
+      }),
   };
 }
 

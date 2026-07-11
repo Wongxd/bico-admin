@@ -166,6 +166,35 @@ func NewAdminRoleHandler(db *gorm.DB, cacheInvalidator service.AuthCacheInvalida
 		}
 		return nil
 	}
+	h.DeleteBatchInTx = func(tx *gorm.DB, ids []uint) error {
+		// 删除角色前先失效这些角色下的用户权限缓存，避免关联清理后无法定位用户集合。
+		if h.cacheInvalidator != nil {
+			h.cacheInvalidator.InvalidateRolesUsersPermissionCache(ids)
+		}
+		// 先批量清理角色权限关联，失败则回滚。
+		if err := tx.Where("role_id IN ?", ids).Delete(&model.AdminRolePermission{}).Error; err != nil {
+			return err
+		}
+		// 再批量清理用户角色关联，失败则回滚。
+		if err := tx.Where("role_id IN ?", ids).Delete(&model.AdminUserRole{}).Error; err != nil {
+			return err
+		}
+		return nil
+	}
+	h.BeforeDeleteBatch = func(tx *gorm.DB, ids []uint) error {
+		var count int64
+		if err := tx.Model(&model.AdminRole{}).
+			Where("id IN ? AND code = ?", ids, model.SuperAdminRoleCode).
+			Count(&count).Error; err != nil {
+			// 保留角色查询失败时不执行批量删除。
+			return err
+		}
+		if count > 0 {
+			// 超级管理员角色不能随批量操作删除。
+			return errors.New("超级管理员角色不可删除")
+		}
+		return nil
+	}
 
 	return h
 }

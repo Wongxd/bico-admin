@@ -1,5 +1,7 @@
 .PHONY: help serve air dev tidy install migrate build web build-web package package-win clean swagger
 
+export GOROOT :=
+
 help:
 	@echo "可用命令:"
 	@echo "  make serve     - 启动后端服务"
@@ -67,7 +69,7 @@ build:
 
 web:
 	@echo "🚀 启动前端开发服务器..."
-	@cd web && pnpm start
+	@cd web && pnpm run dev
 
 build-web:
 	@echo "🎨 构建前端..."
